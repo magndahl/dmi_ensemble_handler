@@ -47,6 +47,6 @@ Temporary Items
 .apdisk
 
 # Python pyc files and numpy data files
-.pyc
-.npy
-.npz
+*.pyc
+settings/forretningslag_login.npz
+*.npy
