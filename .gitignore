@@ -45,3 +45,8 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Python pyc files and numpy data files
+.pyc
+.npy
+.npz
