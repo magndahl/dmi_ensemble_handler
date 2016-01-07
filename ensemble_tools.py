@@ -7,6 +7,7 @@ Created on Wed Dec 23 13:15:04 2015
 
 import numpy as np
 import datetime as dt
+import dateutil.rrule
 
 # properties of the DMI data
 DMI_update_interval = 6 # every 6 hours at 00, 06, 12 and 18
@@ -35,6 +36,44 @@ def get_most_recent_filename(timestamp, data_delay=5):
                                                       DMI_update_interval))
                                                       
     return 'Aarhus_' + timestamp_str(data_file_timestamp)
+
+
+def gen_timeseries(field, timesteps, pointcode=71699, \
+                   get_filename_func=get_most_recent_filename, \
+                   get_filenam_func_kwargs=None):
+    time_series = np.zeros((len(timesteps),25))
+    for ts, i in zip(timesteps, range(len(timesteps))):
+        filename = get_filename_func(ts)      
+        searchstring = gen_searchstring_pointcode(field, pointcode)
+        line_number = find_linenumber(searchstring, filename)
+        data_arr = load_data(line_number, filename)
+        time_series[i] = data_arr[row_number_by_timestamp(ts,data_arr), 1:]
+        
+    return time_series
+        
+        
+def save_most_recent_timeseries(fieldname, ts_start, ts_end, pointcode=71699, \
+                                savepath='time_series/'):
+    filename = ''.join([fieldname, '_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end)])
+    
+    timesteps = gen_hourly_timesteps(ts_start, ts_end)
+    ens_timeseries = gen_timeseries(field_map[fieldname], timesteps, pointcode)                
+    np.save(savepath+filename, ens_timeseries)
+    print "Saved file: %s"%filename
+    
+
+def gen_hourly_timesteps(start, stop):
+    return list(dateutil.rrule.rrule(dateutil.rrule.HOURLY, dtstart=start, until=stop))
+    
+
+def row_number_by_timestamp(timestamp, array):
+    """ Takes array like the one returned from load_data, along
+        with at timestep. Returns the row of said timestep.
+        Creates runtime error if the timestep is not in the array.
+        
+        """
+    return np.where(array[:,0]==int(timestamp_str(timestamp)))[0][0]
     
     
 def timestamp_str(timestamp):
@@ -91,3 +130,7 @@ def gen_searchstring_pointcode(field, pointcode=71699):
         """
         
     return str(pointcode) + "   " + str(field)
+    
+
+def Kelvin_to_Celcius(array):
+    return array - 273.15
