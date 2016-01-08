@@ -134,3 +134,12 @@ def gen_searchstring_pointcode(field, pointcode=71699):
 
 def Kelvin_to_Celcius(array):
     return array - 273.15
+    
+
+def ensemble_std(array):
+    return array.std(axis=1)
+    
+    
+def ensemble_abs_spread(array):
+    return array.max(axis=1) - array.min(axis=1)
+    
