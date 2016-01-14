@@ -134,7 +134,10 @@ def gen_searchstring_pointcode(field, pointcode=71699):
 
 def Kelvin_to_Celcius(array):
     return array - 273.15
-    
+
+def frac_to_percent(array):
+    return 100.*array    
+
 
 def ensemble_std(array):
     return array.std(axis=1)
