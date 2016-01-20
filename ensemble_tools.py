@@ -63,6 +63,43 @@ def save_most_recent_timeseries(fieldname, ts_start, ts_end, pointcode=71699, \
     print "Saved file: %s"%filename
     
 
+def save_ens_mean_series(ts_start=dt.datetime(2015,12,16,1),\
+                         ts_end=dt.datetime(2016,1,15,0), pointcode=71699, 
+                         savepath='time_series/ens_means/'):
+    """ Note, that the initial time stamp of the save time series is 24 hours
+        later that ts_start because some of the time series have been averaged
+        over the previous 24 hours.
+        
+        """
+        
+    
+    load_suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])
+    save_suffix = ''.join(['_geo', str(pointcode), '_',\
+                            timestamp_str(ts_start+dt.timedelta(hours=24)), \
+                           '_to_', timestamp_str(ts_end)])
+                           
+    for v in ['Tout', 'hum', 'vWind', 'sunRad']:
+        try:
+            ens_data = np.load('time_series/' + v + load_suffix)
+        except:
+            print "Ensemble times series not found. Generating more: "
+            save_most_recent_timeseries(v, ts_start, ts_end, pointcode=pointcode)
+            ens_data = np.load('time_series/' + v + load_suffix)
+        
+        if v=='Tout':
+            ens_data = Kelvin_to_Celcius(ens_data) ## convert the temperature to celcius
+            
+        hourly_mean = ens_data.mean(axis=1)
+        
+        mean_last_24h = np.array([np.mean(hourly_mean[i:i+24]) for i in range(hourly_mean.shape[0]-24)])
+        hourly_mean_excepday1 = hourly_mean[24:]
+        
+        np.save(savepath + v + save_suffix, hourly_mean_excepday1)
+        np.save(savepath + v + 'avg24' + save_suffix, mean_last_24h)
+        print "Saved files: " + savepath + v + save_suffix + "\n" + savepath + v + 'avg24' + save_suffix
+        
+
 def gen_hourly_timesteps(start, stop):
     return list(dateutil.rrule.rrule(dateutil.rrule.HOURLY, dtstart=start, until=stop))
     
