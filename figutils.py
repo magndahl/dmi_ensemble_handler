@@ -7,9 +7,12 @@ Created on Thu Jan 07 14:41:35 2016
 import datetime as dt
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import ensemble_tools as ens
 import sql_tools as sq
 
+weathervars = ['Tout', 'vWind', 'hum', 'sunRad']
 
 
 def most_recent_ens_timeseries(start_stop=(dt.datetime(2015,12,16,0), dt.datetime(2016,1,19,0)), pointcode=71699, shift_steno_one=False):
@@ -18,7 +21,6 @@ def most_recent_ens_timeseries(start_stop=(dt.datetime(2015,12,16,0), dt.datetim
         
         """
     plt.close('all')    
-    weathervars = ['Tout', 'vWind', 'hum', 'sunRad']
     ylabels = ['[$\degree $C]', '[m/s]', '[%]', '[W/m$^2$]']  
     
     suffix = ''.join(['_geo', str(pointcode), '_', ens.timestamp_str(start_stop[0]), \
@@ -66,30 +68,69 @@ def most_recent_ens_timeseries(start_stop=(dt.datetime(2015,12,16,0), dt.datetim
         figfilename = v + '_most_recent_ens_timeseries.pdf'
         plt.savefig('figures/' + figfilename)
         
+def create_5_fold_scatter(avg24=False):
+    plt.close('all')
+    start_stop=(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    load_suffix = '_geo71699_2015121701_to_2016011500.npy'
+    figfilename = 'prod_weather_pairplot.pdf'
+    if avg24:
+        load_suffix = 'avg24' + load_suffix
+        figfilename = 'avg24_' + figfilename
+    load_path = 'time_series/ens_means/'
+    
+    data_dict = {v:np.load(load_path + v + load_suffix) for v in weathervars}
+    data_dict['prod'] = sq.fetch_production(start_stop[0], start_stop[1])
+    data_dict['(Tout-17)*vWind'] = (data_dict['Tout']-17)*data_dict['vWind']
+    
+    dataframe = pd.DataFrame(data_dict)
+    
+    sns.pairplot(dataframe)    
+    
+    plt.savefig('figures/' + figfilename)
+
+    
+def corr_coeff_plot():
+    plt.close('all')
+    start_stop=(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    load_suffix = '_geo71699_2015121701_to_2016011500.npy'
+    load_path = 'time_series/ens_means/'
+    
+    allvars = weathervars + [v + 'avg24' for v in weathervars]
+    data_dict = {v:np.load(load_path + v + load_suffix) for v in allvars}
+    data_dict['prod'] = sq.fetch_production(start_stop[0], start_stop[1])
+    data_dict['(Tout-17)*vWind'] = (data_dict['Tout']-17)*data_dict['vWind']
+    data_dict['(Toutavg-17)*vWindavg24'] = (data_dict['Toutavg24']-17)*data_dict['vWindavg24']
+    
+    dataframe = pd.DataFrame(data_dict)
+    sns.heatmap(dataframe.corr())
+    
+    return dataframe
+    
 
 def check_ens_mean_data():
     plt.close('all')
     start_stop=(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
     timesteps = ens.gen_hourly_timesteps(start_stop[0], start_stop[1])
-    
-    weathervars = ['Tout', 'vWind', 'hum', 'sunRad']   
+     
     for v in weathervars:
         hourly_data = np.load('time_series/ens_means/' + v +'_geo71699_2015121701_to_2016011500.npy')
         daily_avg_data = np.load('time_series/ens_means/' + v +'avg24_geo71699_2015121701_to_2016011500.npy')
         plt.figure()
         plt.title(v)
-        plt.plot_date(timesteps, hourly_data, label='Hourly')
-        plt.plot_date(timesteps, daily_avg_data, label='Average over last 24h')
+        plt.plot_date(timesteps, hourly_data, '-', label='Hourly')
+        plt.plot_date(timesteps, daily_avg_data, '-', label='Average over last 24h')
         plt.legend()
-        
-        
+               
 
 def check_for_timeshift():
+    """ This function chec if there is a time shift between data from
+        the Brabrand Syd weather station and the Steno Museum one. 
+        It appears that Steno data is one hour fast..
+        
+        """
     
     plt.close('all')
     start_stop=(dt.datetime(2015,12,16,0), dt.datetime(2016,1,16,0))
-    pointcode=71699
-    weathervars = ['Tout', 'vWind', 'hum', 'sunRad']
 
     timesteps = ens.gen_hourly_timesteps(start_stop[0], start_stop[1])
     
