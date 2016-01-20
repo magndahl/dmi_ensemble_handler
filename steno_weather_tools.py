@@ -5,17 +5,6 @@ Created on Tue Jan 12 15:09:04 2016
 @author: Magnus Dahl
 """
 
-#vantage_reader.py
-#
-# Input files:
-# <myyyy>vantagelog.txt
-# <myyyy>lg.txt
-# <myyyy>indoorlog.txt
-#
-# Output file: <myyyy>timestamp_weather.txt
-#
-# Output file columns:UTC_stamp UTC_year_month_day_time+tz temp_out humidity barometer windspeed winddir rainlastmin solar_rad UV temp_in_Steno
-#
 from datetime import datetime, timedelta
 from pytz import timezone
 import pytz
@@ -23,14 +12,53 @@ utc = pytz.utc
 import time
 import calendar
 import numpy as np
-#
+from ensemble_tools import timestamp_str
+
+### NOTE: I have a strong suspicion that when DUKS says that the time stamps
+### in *lg or *vantagelog files are local time (UTC + 1 in winter), it
+### is actually local time for Finland or something (UTC + 2 in winter)
+## This I base on the fact that sunrise seems to come an hour late.
+## So far these functions assume that DUKS are correct, so the time series
+## generated are shifted by one hour compared to data from Brabrand Syd.
 
 datapath='Q:/Weatherdata/Steno_weatherstation/'
 
+def save_hourly_timeseries(months_years = [(12,2015), (1,2016)], new_data_avail=True):
+    """ This function saves the hourly time series of outdoor temperature, wind speed,
+        humidity and solar radiation from the Steno weather station. Possibly 
+        spanning several months. The timesteps are also saved.
+        
+        """
+        
+    dat_arrays_list = []     
+    for mnyr in months_years:
+        month = mnyr[0]
+        year = mnyr[1]
+        if new_data_avail:
+            create_timestamp_weather(month, year)
+        data = load_timestamp_weather(month, year)
+        local_ts = get_local_timesteps(data)
+        TvWhsR_data = create_Tout_vWind_hum_sunRad_array(data)
+        dat_arrays_list.append(agg_data_hourly(TvWhsR_data, local_ts))
+        
+    timestep_array = np.concatenate([d[1] for d in dat_arrays_list])
+    full_timeseries_array = np.concatenate([d[0] for d in dat_arrays_list])
+    filename = 'Steno_hourly_' + timestamp_str(timestep_array[0]) + '_to_' + timestamp_str(timestep_array[-1])
+    np.savez(datapath+filename, timesteps=timestep_array, Tout_vWind_hum_sunRad=full_timeseries_array)    
+    
+    return                   
+
+
 def load_timestamp_weather(month, year, path=datapath):
+    """ Loads output file from create_timestamp_weather(month, year, path=datapath)
+        into a numpy array.
+        
+        """
+        
     filename = str(month) + str(year) + '_timestamp_weather.txt'
     data=np.genfromtxt(path+filename, skip_header=2)
     return data
+    
     
 def get_local_timesteps(data):
     """ takes data array output of load_timestamps_weather
@@ -55,15 +83,48 @@ def create_Tout_vWind_hum_sunRad_array(data):
     
 
 def agg_data_hourly(Tout_vWind_hum_sunRad_array, local_timestamps):
+    """ This funcction takes the output of create_Tout_vWind_hum_sunRad_array(data),
+        along with the local_timestamps from get_local_timesteps(data). 
+        The function bunches the data by hour and assigns the mean of each bunch
+        the the hourly ENDPOINT of the time interval.
+        It's not elegant but it gets the job done.
+        """
+        
+    hourly_timesteps = gen_hourly_timesteps(local_timestamps)
+    
+    data_bunched_by_hour = []
+    for i in range(len(hourly_timesteps)):
+        if i==0:
+            start_hour = hourly_timesteps[0] + timedelta(hours=-1)
+        else:
+           start_hour = hourly_timesteps[i-1]
+        stop_hour = hourly_timesteps[i]
+        
+        indices = [local_timestamps.index(ts) for ts in local_timestamps if start_hour < ts <= stop_hour]
+        data_bunched_by_hour.append(Tout_vWind_hum_sunRad_array[indices,:])
+    
+    hourly_data = np.zeros((len(hourly_timesteps), Tout_vWind_hum_sunRad_array.shape[1]), dtype=float)
+    for i in range(len(hourly_timesteps)):
+        if not any(np.isnan(data_bunched_by_hour[i].mean(axis=0))):        
+            hourly_data[i,:] = data_bunched_by_hour[i].mean(axis=0)
+        else:
+            try:
+                hourly_data[i,:] = hourly_data[i-1,:] # if data is missing for an hour, set to point for the previous hour
+            except:
+                print "Missing data: Data for hourly timestep " + str(hourly_timesteps[i]) + " set to 0."
+                                
+    return hourly_data, hourly_timesteps
+    
+    
+def gen_hourly_timesteps(local_timestamps):
     ts_start = local_timestamps[0]
     number_of_hours = int(np.ceil((local_timestamps[-1]-ts_start).total_seconds()/3600))
     ts_start_next_hour = ts_start + timedelta(hours=1)
     ts_start_hour = datetime(ts_start_next_hour.year, ts_start_next_hour.month, ts_start_next_hour.day, ts_start_next_hour.hour)
     hourly_timesteps = [ts_start_hour + timedelta(hours=x) for x in range(number_of_hours)]
     
-    return hourly_timesteps
-    
-    
+    return hourly_timesteps    
+
 
 def create_timestamp_weather(month, year, path=datapath):
     """ credit for this function to the writers of DUKS_Steno_reader.py
