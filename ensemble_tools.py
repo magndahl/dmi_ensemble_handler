@@ -7,7 +7,10 @@ Created on Wed Dec 23 13:15:04 2015
 
 import numpy as np
 import datetime as dt
+import pandas as pd
 import dateutil.rrule
+import sql_tools as sq
+
 
 # properties of the DMI data
 DMI_update_interval = 6 # every 6 hours at 00, 06, 12 and 18
@@ -98,7 +101,21 @@ def save_ens_mean_series(ts_start=dt.datetime(2015,12,16,1),\
         np.save(savepath + v + save_suffix, hourly_mean_excepday1)
         np.save(savepath + v + 'avg24' + save_suffix, mean_last_24h)
         print "Saved files: " + savepath + v + save_suffix + "\n" + savepath + v + 'avg24' + save_suffix
-        
+
+
+def repack_ens_mean_as_df(ts_start=dt.datetime(2015,12,17,1), ts_end=dt.datetime(2016,1,15,0),\
+                          load_path='time_series/ens_means/', pointcode=71699):
+    load_suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])
+    weathervars = ['Tout', 'hum', 'vWind', 'sunRad']
+    allvars = weathervars + [v + 'avg24' for v in weathervars]
+    data_dict = {v:np.load(load_path + v + load_suffix) for v in allvars}
+    data_dict['prod'] = sq.fetch_production(ts_start, ts_end)
+    data_dict['(Tout-17)*vWind'] = (data_dict['Tout']-17)*data_dict['vWind']
+    data_dict['(Toutavg-17)*vWindavg24'] = (data_dict['Toutavg24']-17)*data_dict['vWindavg24']   
+    dataframe = pd.DataFrame(data_dict)  
+    return dataframe     
+
 
 def gen_hourly_timesteps(start, stop):
     return list(dateutil.rrule.rrule(dateutil.rrule.HOURLY, dtstart=start, until=stop))
@@ -167,6 +184,7 @@ def gen_searchstring_pointcode(field, pointcode=71699):
         """
         
     return str(pointcode) + "   " + str(field)
+    
     
 
 def Kelvin_to_Celcius(array):
