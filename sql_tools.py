@@ -7,7 +7,7 @@ Created on Mon May 18 16:29:13 2015
 
 import pymssql
 import numpy as np
-from ensemble_tools import gen_hourly_timesteps, timestamp_str
+import ensemble_tools as ens#import gen_hourly_timesteps, timestamp_str
 
 login_info = np.load('settings/forretningslag_login.npz')
 srv = str(login_info['server'])
@@ -56,7 +56,7 @@ def fetch_BrabrandSydWeather(weathervar, from_time, to_time):
        
     data = extractdata(conn, sql_query)
     timestamps, values, description = zip(*data)
-    assert(list(timestamps)==gen_hourly_timesteps(from_time, to_time)), "Timesteps are not hour by hour"
+    assert(list(timestamps)==ens.gen_hourly_timesteps(from_time, to_time)), "Timesteps are not hour by hour"
     
     return np.array(values, dtype=float)
     
@@ -68,10 +68,10 @@ def fetch_production(from_time, to_time):
                           ,[SamletProduktionMWh]
                       FROM [dbo].[vFact_Timepris_Doegn]
                       WHERE Tid_Key BETWEEN '%s' AND  '%s'
-                      ORDER BY Tid_Key""" % (timestamp_str(from_time), timestamp_str(to_time))
+                      ORDER BY Tid_Key""" % (ens.timestamp_str(from_time), ens.timestamp_str(to_time))
                       
     data = extractdata(conn, sql_query)
     timestamps, production = zip(*data)
-    assert(list(timestamps)==[int(timestamp_str(ts)) for ts in gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
     
     return np.array(production, dtype=float)
