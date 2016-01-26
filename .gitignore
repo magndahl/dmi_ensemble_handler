@@ -53,3 +53,4 @@ settings/forretningslag_login.npz
 *.pdf
 all_fit_summary.txt
 good_fit_summary.txt
+lin_reg_fit_params.pkl

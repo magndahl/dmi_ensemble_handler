@@ -8,6 +8,7 @@ Created on Thu Jan 21 09:50:42 2016
 
 from itertools import combinations
 import statsmodels.api as sm
+import datetime as dt
 from statsmodels.sandbox.regression.predstd import wls_prediction_std
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,6 +24,8 @@ all_data['hours3'] = [h**3 for h in hours]
 all_data['hours4'] = [h**4 for h in hours]
 all_data['hours5'] = [h**5 for h in hours]
 all_data['hours6'] = [h**6 for h in hours]
+all_data['hours7'] = [h**7 for h in hours]
+all_data['hours8'] = [h**8 for h in hours]
 
 y = all_data['prod']
 
@@ -115,7 +118,7 @@ def save_good_fit_candidates(savefile='good_fit_summary.txt'):
     
 def plot_best_model():
     plt.close('all')
-    columns = ['Tout', 'Toutavg24', 'vWind', 'vWindavg24']#, 'hours', 'hours2','hours3', 'hours4','hours5', 'hours6']
+    columns = ['Tout', 'Toutavg24', 'vWind', 'vWindavg24']#, 'hours', 'hours2','hours3', 'hours4','hours5', 'hours6']#, 'hours7', 'hours8']#,'hours5', 'hours6']
     X = all_data[columns]
     res = mlin_regression(y, X)
     timesteps = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
@@ -139,9 +142,23 @@ def plot_best_model():
     plt.legend()
     
     mape = np.mean(np.abs((res.fittedvalues + mean_resid_series-y)/y))
+    mape2 = np.mean(np.abs((res.resid)/y))
+    mae = np.mean(np.abs((res.fittedvalues + mean_resid_series-y)))
     
-    print mape
+    print mape, mape2, mae
     
     
     res.summary()
-    return res           
+    return res
+
+def save_best_model():
+    columns = ['Tout', 'Toutavg24', 'vWind', 'vWindavg24']
+    X = all_data[columns]
+    res = mlin_regression(y, X)        
+    
+    res.params.to_pickle('lin_reg_fit_params.pkl')
+    mean_day_resid = [res.resid[i::24].mean() for i in range(24)]
+    
+    np.save('daily_profile.npy', mean_day_resid)
+    
+    return res
