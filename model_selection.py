@@ -13,6 +13,7 @@ from statsmodels.sandbox.regression.predstd import wls_prediction_std
 import numpy as np
 import matplotlib.pyplot as plt
 import ensemble_tools as ens
+import pandas as pd
 
 
 all_data = ens.repack_ens_mean_as_df()
@@ -162,3 +163,43 @@ def save_best_model():
     np.save('daily_profile.npy', mean_day_resid)
     
     return res
+    
+
+def linear_map(dataframe, params, cols):
+    result = np.zeros(len(dataframe))
+    for c in cols:
+        result += dataframe[c]*params[c]
+    
+    try:
+        result += params['const']
+    except:
+        print "no constant term in params"
+                
+    return result
+    
+    
+def validate_ToutToutavg24vWindvWindavg24_model():
+    plt.close('all')
+    
+    ts_start = dt.datetime(2016,1,19,1)
+    ts_end = dt.datetime(2016,1,26,0)
+    
+    daily_profile = np.load('daily_profile.npy')
+    params = pd.read_pickle('lin_reg_fit_params.pkl')
+    validation_data = ens.repack_ens_mean_as_df(ts_start, ts_end)    
+    
+    weather_model = linear_map(validation_data, params, ['Tout', 'Toutavg24', 'vWind', 'vWindavg24'])
+    timesteps = ens.gen_hourly_timesteps(ts_start, ts_end)
+    
+    plt.plot_date(timesteps, validation_data['prod'],'b-')
+    plt.plot_date(timesteps, weather_model,'r-')
+    
+    weather_model_wdailyprofile = []
+    for ts, wm in zip(timesteps, weather_model):
+        print ts.hour
+        weather_model_wdailyprofile.append(wm + daily_profile[np.mod(ts.hour-1,24)])
+    
+    plt.plot_date(timesteps, weather_model_wdailyprofile, 'g-')
+    
+    return validation_data
+    
