@@ -6,32 +6,37 @@ Created on Thu Jan 21 09:50:42 2016
 @author: Magnus Dahl
 """
 
+import ensemble_tools as ens
+import sql_tools as sq
 from itertools import combinations
 import statsmodels.api as sm
+from statsmodels.graphics.gofplots import qqplot
 import datetime as dt
 from statsmodels.sandbox.regression.predstd import wls_prediction_std
 import numpy as np
 import matplotlib.pyplot as plt
-import ensemble_tools as ens
+
 import pandas as pd
 
 
 all_data = ens.repack_ens_mean_as_df()
 
 hours = [np.mod(h, 24) for h in range(1,697)]
-all_data['hours'] = hours
-all_data['hours2'] = [h**2 for h in hours]
-all_data['hours3'] = [h**3 for h in hours]
-all_data['hours4'] = [h**4 for h in hours]
-all_data['hours5'] = [h**5 for h in hours]
-all_data['hours6'] = [h**6 for h in hours]
-all_data['hours7'] = [h**7 for h in hours]
-all_data['hours8'] = [h**8 for h in hours]
+
+all_data['prod24h_before'] = sq.fetch_production(dt.datetime(2015,12,16,1), dt.datetime(2016,1,14,0))
+all_data['(Tout-17)*vWind*hum'] = all_data['(Tout-17)*vWind']*all_data['hum']
+all_data['(Toutavg24-17)*vWindavg24*humavg24'] = all_data['(Toutavg-17)*vWindavg24']*all_data['humavg24']
+
+
+for c in all_data.columns:
+    all_data['Z' + c] = (all_data[c]-all_data[c].mean())/all_data[c].std()
+
 
 y = all_data['prod']
 
-def mlin_regression(y, X):
-    X = sm.add_constant(X) # adds a constant term to the regression
+def mlin_regression(y, X, add_const=True):
+    if add_const:
+        X = sm.add_constant(X) # adds a constant term to the regression
     est = sm.OLS(y,X).fit()
     return est
     
@@ -41,7 +46,7 @@ def summary_to_file(est, openfile):
     
 
 def gen_all_combinations(columns=['(Tout-17)*vWind', '(Toutavg-17)*vWindavg24', 'Toutavg24',
-       'hum', u'humavg24', 'sunRad', 'sunRadavg24', 'vWind',
+       'hum', 'humavg24', 'sunRad', 'sunRadavg24', 'vWind',
        'vWindavg24']):
     
     subsets = []       
@@ -51,24 +56,28 @@ def gen_all_combinations(columns=['(Tout-17)*vWind', '(Toutavg-17)*vWindavg24', 
                         
     return subsets
     
-def include_Tout(subsets):
+def include_Tout(subsets, Tout_str='Tout'):
     """ include one combination with only Tout and include Tout in all other
         combs.
         
         """
         
-    subsets_with_Tout = [['Tout'] + s for s in subsets]
-    return [['Tout']] + subsets_with_Tout
+    subsets_with_Tout = [[Tout_str] + s for s in subsets]
+    return [[Tout_str]] + subsets_with_Tout
+    
+def include_prod24h_before(subsets, prod24hbefor_str='prod24h_before'):
+    return [[prod24hbefor_str] + s for s in subsets]
     
 
-def make_all_fits(all_combs=include_Tout(gen_all_combinations())):
+def make_all_fits(all_combs=include_Tout(gen_all_combinations()), add_const=True, y=y):
     results = []
     for columns in all_combs:
         X = all_data[columns]
-        res = mlin_regression(y,X)
+        res = mlin_regression(y,X, add_const=add_const)
         results.append(res)
     
     return results
+    
     
 def norm_xTx(X):
     X = np.array(X)
@@ -79,6 +88,7 @@ def norm_xTx(X):
     
     return norm_xTx
     
+    
 def condition_number(X):
     normxTx = norm_xTx(X)
     eigs = np.linalg.eigvals(normxTx)
@@ -87,16 +97,21 @@ def condition_number(X):
     return condition_number
     
     
-def save_all_fits(savefile='all_fit_summary.txt'):
-    all_combs=include_Tout(gen_all_combinations())
-    results = make_all_fits(all_combs)
+def save_all_fits(savefile='all_fit_summary.txt', \
+    all_combs=include_Tout(gen_all_combinations()), add_const=True, y=y):
+    results = make_all_fits(all_combs, add_const, y=y)
     
     with open(savefile,'w') as myfile:   
         for c, res in zip(all_combs, results):
             cond_number = res.condition_number
-            if cond_number < 1e3 and all(res.pvalues <0.05):
-                myfile.write("\n-------------------- \n Condition number = %2.3f \n------------------- \n"%cond_number)
+            if all(res.pvalues < 0.05) and cond_number<20:
+                myfile.write("\n-------------------- \n Condition number = %2.3f \n"%cond_number)
+                myfile.write("MAE = " + str(mae(res.resid)) + " \n")
+                myfile.write("RMSE = " + str(rmse(res.resid)) + " \n------------------- \n")
                 summary_to_file(res,myfile)
+                
+    return results
+    
             
 
 def save_good_fit_candidates(savefile='good_fit_summary.txt'):
@@ -203,3 +218,80 @@ def validate_ToutToutavg24vWindvWindavg24_model():
     
     return validation_data
     
+
+def try_prod24h_before(columns=['Tout', 'vWind', 'vWindavg24', 'prod24h_before'], add_const=False, y=y):
+    plt.close('all')
+    X = all_data[columns]
+    res = mlin_regression(y, X, add_const=add_const)
+    timesteps = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    
+    plt.subplot(2,1,1)
+    plt.plot_date(timesteps, y, 'b', label='Actual prodution')
+    plt.plot_date(timesteps, res.fittedvalues, 'r', label='Weather model')
+    prstd, iv_l, iv_u = wls_prediction_std(res)    
+    plt.plot_date(timesteps, iv_u, 'r--', label='95% conf. int.')
+    plt.plot_date(timesteps, iv_l, 'r--')
+    plt.ylabel('MW')
+    plt.legend(loc=2)
+    plt.subplot(2,1,2)
+    plt.plot_date(timesteps, res.resid, '-', label='Residual')
+    plt.ylabel('MW')
+    plt.legend()
+    
+    print "MAE = " + str(mae(res.resid))
+    print "MAPE = " + str(mape(res.resid, y))
+    print "RMSE = " + str(rmse(res.resid))
+    
+    print res.summary()
+    
+       
+    return res
+    
+
+def mae(error):
+    return np.mean(np.abs(error))
+    
+
+def mape(error, prod):
+    return mae(error/prod)
+    
+    
+def rmse(error):
+    return np.sqrt(np.mean(error**2))
+    
+
+def param_from_zscoreparam(zparams, paramname='Tout'):
+    if paramname=='const':
+        const = all_data['prod'].mean()
+        for zpn in zparams.keys():
+            pn = zpn[1:] # remove the Z
+            const -= all_data[pn].mean()*param_from_zscoreparam(zparams, pn)
+        return const
+        
+    return zparams['Z' + paramname]*all_data['prod'].std()/all_data[paramname].std()
+
+
+def params_from_zscoreparam(zparams):
+    params = pd.Series()
+    for zpn in zparams.keys():
+        pn = zpn[1:] # remove the Z
+        params[pn] = param_from_zscoreparam(zparams, pn)
+    params['const'] = param_from_zscoreparam(zparams, 'const')
+
+    return params
+    
+    
+def conf_int_from_zscoreconfint(conf_int, paramname='Tout'):
+    if paramname=='const':
+        const_lb = all_data['prod'].mean()
+        const_ub = all_data['prod'].mean()
+        for zpn in conf_int[0].keys():
+            pn = zpn[1:] # remove the Z
+            const_lb -= all_data[pn].mean()*conf_int_from_zscoreconfint(conf_int, pn)[0]
+            const_ub -= all_data[pn].mean()*conf_int_from_zscoreconfint(conf_int, pn)[1]
+        return (const_lb, const_ub)
+    
+    lb = conf_int[0]['Z' + paramname]*all_data['prod'].std()/all_data[paramname].std()
+    ub = conf_int[1]['Z' + paramname]*all_data['prod'].std()/all_data[paramname].std()
+    
+    return (lb,ub)

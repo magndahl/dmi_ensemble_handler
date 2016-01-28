@@ -54,3 +54,5 @@ settings/forretningslag_login.npz
 all_fit_summary.txt
 good_fit_summary.txt
 lin_reg_fit_params.pkl
+good_candidates_prev24hprod.txt
+*.txt
