@@ -56,3 +56,5 @@ good_fit_summary.txt
 lin_reg_fit_params.pkl
 good_candidates_prev24hprod.txt
 *.txt
+ensemble_and_prod.pkl
+*.png

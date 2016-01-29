@@ -103,6 +103,28 @@ def save_ens_mean_series(ts_start=dt.datetime(2015,12,16,1),\
         print "Saved files: " + savepath + v + save_suffix + "\n" + savepath + v + 'avg24' + save_suffix
 
 
+def load_ens_timeseries_as_df(ts_start=dt.datetime(2015,12,17,1),\
+                         ts_end=dt.datetime(2016,1,15,0), pointcode=71699, weathervars=['Tout', 'vWind']):
+    load_suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])
+    df = pd.DataFrame()                     
+    for v in weathervars:
+        try:
+            ens_data = np.load('time_series/' + v + load_suffix)
+        except:
+            print "Ensemble times series not found. Generating more: "
+            save_most_recent_timeseries(v, ts_start, ts_end, pointcode=pointcode)
+            ens_data = np.load('time_series/' + v + load_suffix)
+        
+        if v=='Tout':
+            ens_data = Kelvin_to_Celcius(ens_data) ## convert the temperature to celcius
+        
+        for i in range(ens_data.shape[1]):
+            key = v + str(i)
+            df[key] = ens_data[:,i]
+    return df
+
+
 def repack_ens_mean_as_df(ts_start=dt.datetime(2015,12,17,1), ts_end=dt.datetime(2016,1,15,0),\
                           load_path='time_series/ens_means/', pointcode=71699):
     load_suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
