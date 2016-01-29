@@ -11,6 +11,9 @@ import pandas as pd
 import seaborn as sns
 import ensemble_tools as ens
 import sql_tools as sq
+from model_selection import linear_map, mlin_regression, mae, mape, rmse
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
+
 
 weathervars = ['Tout', 'vWind', 'hum', 'sunRad']
 
@@ -159,5 +162,100 @@ def check_for_timeshift():
         plt.tight_layout()
         plt.suptitle(v)
             
-            
+
+         
+def first_ens_prod_fig():
+    plt.close('all')
+    cols = ['Tout', 'vWind', 'prod24h_before']
+        
+    ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,1,28,0))
     
+    #load the data
+    fit_data = ens.repack_ens_mean_as_df()
+    fit_data['prod24h_before'] = sq.fetch_production(dt.datetime(2015,12,16,1), dt.datetime(2016,1,14,0))
+
+    vali_data = ens.repack_ens_mean_as_df(dt.datetime(2016,1,20,1), dt.datetime(2016,1,28,0))
+    vali_data['prod24h_before'] = sq.fetch_production(dt.datetime(2016,1,19,1), dt.datetime(2016,1,27,0))   
+    
+ 
+    # do the fit
+    X = fit_data[cols]
+    y = fit_data['prod']
+    res = mlin_regression(y, X, add_const=True)    
+    
+    fig, [ax1, ax2] = plt.subplots(2,1, figsize=(40,20))
+    
+    # load ensemble data
+    ens_data1 = ens.load_ens_timeseries_as_df(ts_start=ts1[0], ts_end=ts1[-1])
+    ens_data1['prod24h_before'] = fit_data['prod24h_before']    
+    ens_data2 = ens.load_ens_timeseries_as_df(ts_start=ts2[0], ts_end=ts2[-1])
+    ens_data2['prod24h_before'] = vali_data['prod24h_before']
+    
+    all_ens_data = pd.concat([ens_data1, ens_data2])
+    all_ts = ts1 + ts2    
+    
+    
+    # calculate production for each ensemble member
+    ens_prods = np.zeros((len(all_ts), 25))
+    for i in range(25):
+        ens_cols = ['Tout' + str(i), 'vWind' + str(i), 'prod24h_before']
+        ens_params = pd.Series({'Tout' + str(i):res.params['Tout'],
+                                'vWind' + str(i):res.params['vWind'],
+                                'const':res.params['const'],
+                                'prod24h_before':res.params['prod24h_before']})
+        ens_prods[:,i] = linear_map(all_ens_data, ens_params, ens_cols)    
+    
+    
+       
+    # calculate combined confint
+    prstd, iv_l, iv_u = wls_prediction_std(res)
+    mean_conf_int_spread = np.mean(res.fittedvalues - iv_l)
+    model_std = np.concatenate([prstd, (1./1.9599)*mean_conf_int_spread*np.ones(len(ts2))])
+    ens_std = ens_prods.std(axis=1)
+    combined_std = np.sqrt(model_std**2 + ens_std**2)
+    all_prod_model = np.concatenate([res.fittedvalues, linear_map(vali_data, res.params, cols)])
+    combined_ub95 = all_prod_model + 1.9599*combined_std
+    combined_lb95 = all_prod_model - 1.9599*combined_std 
+    
+    # plot confint
+    ax1.fill_between(all_ts, combined_lb95, combined_ub95, label='Combined 95% conf. int.')
+    ax1.fill_between(all_ts, all_prod_model - 1.9599*ens_std, all_prod_model + 1.9599*ens_std, facecolor='grey', label='Ensemble 95% conf. int.')
+    
+    # plot ensempble models    
+    ax1.plot_date(all_ts, ens_prods, '-', lw=0.5)    
+    
+    ax1.plot_date(ts1, y, 'k-', lw=2, label='Actual production')
+    ax1.plot_date(ts1, res.fittedvalues,'r-', lw=2, label='Model on ensemble mean')
+         
+    ax1.plot_date(ts2, vali_data['prod'], 'k-', lw=2, label='')
+    ax1.plot_date(ts2, linear_map(vali_data, res.params, cols), 'r-', lw=2)
+    ax1.set_ylabel('[MW]')
+    ax1.legend(loc=2)
+    
+    vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
+    ax2.plot_date(ts1, res.resid, '-', label='Residual, fitted data')
+    ax2.plot_date(ts2, vali_resid, '-', label='Residual, validation data')
+    ax2.set_ylabel('[MW]')
+    ax2.legend(loc=2)
+    print "MAE = " + str(mae(vali_resid))
+    print "MAPE = " + str(mape(vali_resid, vali_data['prod']))
+    print "RMSE = " + str(rmse(vali_resid))
+    print "ME = " + str(np.mean(vali_resid))
+    
+    print "MAE (fit) = " + str(mae(res.resid))
+    print "MAPE (fit) = " + str(mape(res.resid, fit_data['prod']))
+    print "RMSE (fit)= " + str(rmse(res.resid))
+    print "ME (fit)= " + str(np.mean(res.resid))
+
+    plt.savefig('figures/ens_prod_models.pdf', dpi=600) 
+    plt.figure()
+    plt.plot_date(all_ts, ens_std)
+    plt.ylabel('Std. of ensemble production models [MW]')
+    plt.savefig('figures/std_ens_prod_models.pdf', dpi=600) 
+    
+    
+    sns.jointplot(x=ens_std, y=np.concatenate([res.resid, vali_resid]))
+   
+        
+    return res, all_ens_data, all_ts, fit_data['prod'], vali_data['prod']
