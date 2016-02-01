@@ -26,7 +26,21 @@ hours = [np.mod(h, 24) for h in range(1,697)]
 all_data['prod24h_before'] = sq.fetch_production(dt.datetime(2015,12,16,1), dt.datetime(2016,1,14,0))
 all_data['(Tout-17)*vWind*hum'] = all_data['(Tout-17)*vWind']*all_data['hum']
 all_data['(Toutavg24-17)*vWindavg24*humavg24'] = all_data['(Toutavg-17)*vWindavg24']*all_data['humavg24']
-
+all_data['Tout24hdiff'] = all_data['Tout'] - np.roll(all_data['Tout'], 24)
+Tout24h_before = ens.load_ens_timeseries_as_df(ts_start=dt.datetime(2015,12,16,1),\
+                         ts_end=dt.datetime(2016,1,14,0), weathervars=['Tout']).mean(axis=1)
+vWind24h_before = ens.load_ens_timeseries_as_df(ts_start=dt.datetime(2015,12,16,1),\
+                         ts_end=dt.datetime(2016,1,14,0), weathervars=['vWind']).mean(axis=1)
+sunRad24h_before = ens.load_ens_timeseries_as_df(ts_start=dt.datetime(2015,12,16,1),\
+                         ts_end=dt.datetime(2016,1,14,0), weathervars=['sunRad']).mean(axis=1)
+hum24h_before = ens.load_ens_timeseries_as_df(ts_start=dt.datetime(2015,12,16,1),\
+                         ts_end=dt.datetime(2016,1,14,0), weathervars=['hum']).mean(axis=1)
+                         
+all_data['Tout24hdiff'] = all_data['Tout'] - Tout24h_before
+all_data['vWind24hdiff'] = all_data['vWind'] - vWind24h_before
+all_data['sunRad24hdiff'] = all_data['sunRad'] - sunRad24h_before
+all_data['sunRadavg2424hdiff'] = all_data['sunRadavg24'] - np.roll(all_data['sunRadavg24'],24)
+all_data['hum24hdiff'] = all_data['hum'] - hum24h_before
 
 for c in all_data.columns:
     all_data['Z' + c] = (all_data[c]-all_data[c].mean())/all_data[c].std()
@@ -217,6 +231,47 @@ def validate_ToutToutavg24vWindvWindavg24_model():
     plt.plot_date(timesteps, weather_model_wdailyprofile, 'g-')
     
     return validation_data
+    
+    
+def validate_prod24h_before_and_diffsmodel():
+    plt.close('all')
+    
+    cols = ['prod24h_before', 'Tout24hdiff', 'vWind24hdiff', 'sunRad24hdiff']
+    ts_start = dt.datetime(2016,1,20,1)
+    ts_end = dt.datetime(2016,1,31,0)
+    
+    validation_data = ens.repack_ens_mean_as_df(ts_start, ts_end)
+    
+    # correct error in production:
+    new_val = (validation_data['prod'][116] +validation_data['prod'][116])/2
+    validation_data['prod'][116] = new_val
+    validation_data['prod'][117] = new_val
+    validation_data['prod24h_before'] = sq.fetch_production(ts_start+dt.timedelta(days=-1), ts_end+dt.timedelta(days=-1))
+    validation_data['prod24h_before'][116+24] = new_val
+    validation_data['prod24h_before'][117+24] = new_val
+    Tout24h_before = ens.load_ens_timeseries_as_df(ts_start+dt.timedelta(days=-1),\
+                         ts_end+dt.timedelta(days=-1), weathervars=['Tout']).mean(axis=1)
+    vWind24h_before = ens.load_ens_timeseries_as_df(ts_start+dt.timedelta(days=-1),\
+                         ts_end+dt.timedelta(days=-1), weathervars=['vWind']).mean(axis=1)
+    sunRad24h_before = ens.load_ens_timeseries_as_df(ts_start+dt.timedelta(days=-1),\
+                         ts_end+dt.timedelta(days=-1), weathervars=['sunRad']).mean(axis=1)    
+    validation_data['Tout24hdiff'] = validation_data['Tout'] - Tout24h_before
+    validation_data['vWind24hdiff'] = validation_data['vWind'] - vWind24h_before
+    validation_data['sunRad24hdiff'] = validation_data['sunRad'] - sunRad24h_before
+    
+    # fit on fit area
+    X = all_data[cols]
+    res = mlin_regression(all_data['prod'], X, add_const=False)
+    
+    #apply to validation area
+    weather_model = linear_map(validation_data, res.params, cols)
+    timesteps = ens.gen_hourly_timesteps(ts_start, ts_end)
+    
+    plt.plot_date(timesteps, validation_data['prod'],'b-')
+    plt.plot_date(timesteps, weather_model,'r-')
+    residual = weather_model - validation_data['prod']
+    
+    return validation_data, res, residual
     
 
 def try_prod24h_before(columns=['Tout', 'vWind', 'vWindavg24', 'prod24h_before'], add_const=False, y=y):
