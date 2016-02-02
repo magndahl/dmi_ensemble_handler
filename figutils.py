@@ -426,5 +426,25 @@ def second_ens_prod_fig():
     sns.jointplot(x=pd.Series(vali_ens_std), y=np.abs(vali_resid))
     sns.jointplot(x=vali_data['prod'], y=pd.Series(linear_map(vali_data, res.params, cols)))
    
-        
-    return vali_data, fit_data, res, vali_resid, vali_ens_std
+    EO3_fc1 = sq.fetch_EO3_midnight_forecast(ts1[0], ts1[-1])
+    EO3_fc2 = sq.fetch_EO3_midnight_forecast(ts2[0], ts2[-1])
+    plt.figure()
+    plt.plot_date(ts1, fit_data['prod'], 'k-', label='Actual production')
+    plt.plot_date(ts2, vali_data['prod'], 'k-')
+    plt.plot_date(ts1, EO3_fc1, 'r-', label='EO3 forecast')
+    plt.plot_date(ts2, EO3_fc2, 'r-')
+    EO3_err = EO3_fc2-vali_data['prod']
+    EO3_err_fit = EO3_fc1-fit_data['prod']
+    print "MAE (EO3) = " + str(mae(EO3_err))
+    print "MAPE (EO3) = " + str(mape(EO3_err, vali_data['prod']))
+    print "RMSE (EO3)= " + str(rmse(EO3_err))
+    print "ME (EO3)= " + str(np.mean(EO3_err))
+    
+    print "MAE (EO3_fit) = " + str(mae(EO3_err_fit))
+    print "MAPE (EO3_fit) = " + str(mape(EO3_err_fit, fit_data['prod']))
+    print "RMSE (EO3_fit)= " + str(rmse(EO3_err_fit))
+    print "ME (EO3_fit)= " + str(np.mean(EO3_err_fit))
+     
+    sns.jointplot(x=pd.Series(vali_ens_std), y=np.abs(EO3_err))
+    
+    return vali_data, fit_data, res, combined_std
