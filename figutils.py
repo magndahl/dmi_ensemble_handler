@@ -165,6 +165,11 @@ def check_for_timeshift():
 
          
 def first_ens_prod_fig():
+    """ This plot is based on a production model taking into account:
+        Tout, vWind and the production 24 hours before
+        
+        """
+        
     plt.close('all')
     cols = ['Tout', 'vWind', 'prod24h_before']
         
@@ -259,3 +264,167 @@ def first_ens_prod_fig():
    
         
     return res, all_ens_data, all_ts, fit_data['prod'], vali_data['prod']
+    
+    
+def second_ens_prod_fig():
+    """ This plot is based on a production model taking into account:
+        the production 24 hours before as well as the change in
+        temparature, windspeed and solar radiotion from 24 hours ago to now.
+        
+        """
+        
+    plt.close('all')
+    cols = ['prod24h_before', 'Tout24hdiff', 'vWind24hdiff', 'sunRad24hdiff']
+        
+    ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,1,31,0))
+    
+    #load the data
+    fit_data = ens.repack_ens_mean_as_df()
+    fit_data['prod24h_before'] = sq.fetch_production(ts1[0]+dt.timedelta(days=-1), ts1[-1]+dt.timedelta(days=-1))
+    
+    fit_data['Tout24hdiff'] = fit_data['Tout'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout']).mean(axis=1)
+    fit_data['vWind24hdiff'] = fit_data['vWind'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['vWind']).mean(axis=1)
+    fit_data['sunRad24hdiff'] = fit_data['sunRad'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['sunRad']).mean(axis=1)
+                                    
+    vali_data = ens.repack_ens_mean_as_df(ts2[0], ts2[-1])
+    vali_data['prod24h_before'] = sq.fetch_production(ts2[0]+dt.timedelta(days=-1), ts2[-1]+dt.timedelta(days=-1))
+    vali_data['Tout24hdiff'] = vali_data['Tout'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout']).mean(axis=1)
+    vali_data['vWind24hdiff'] = vali_data['vWind'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['vWind']).mean(axis=1)
+    vali_data['sunRad24hdiff'] = vali_data['sunRad'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['sunRad']).mean(axis=1)
+    
+    # correct error in production:
+    new_val = (vali_data['prod'][116] +vali_data['prod'][116])/2
+    vali_data['prod'][116] = new_val
+    vali_data['prod'][117] = new_val
+    vali_data['prod24h_before'][116+24] = new_val
+    vali_data['prod24h_before'][117+24] = new_val
+    
+    
+ 
+    # do the fit
+    X = fit_data[cols]
+    y = fit_data['prod']
+    res = mlin_regression(y, X, add_const=False)    
+    
+    fig, [ax1, ax2] = plt.subplots(2,1, figsize=(40,20))
+ 
+    # load ensemble data
+    ens_data1 = ens.load_ens_timeseries_as_df(ts_start=ts1[0], ts_end=ts1[-1],\
+                                             weathervars=['Tout', 'vWind', 'sunRad'])
+    ens_data1['prod24h_before'] = fit_data['prod24h_before']
+    ens_data1_24h_before =  ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout', 'vWind', 'sunRad']) 
+    ens_data2 = ens.load_ens_timeseries_as_df(ts_start=ts2[0], ts_end=ts2[-1],\
+                                             weathervars=['Tout', 'vWind', 'sunRad'])
+    ens_data2['prod24h_before'] = vali_data['prod24h_before']
+    ens_data2_24h_before = ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout', 'vWind', 'sunRad']) 
+    for i in range(25):
+        for v in ['Tout', 'vWind', 'sunRad']:
+            key_raw = v + str(i)
+            key_diff = v + '24hdiff' + str(i)
+            ens_data1[key_diff] = ens_data1[key_raw] - ens_data1_24h_before[key_raw]
+            ens_data2[key_diff] = ens_data2[key_raw] - ens_data2_24h_before[key_raw]
+
+    
+    all_ens_data = pd.concat([ens_data1, ens_data2])
+    all_ts = ts1 + ts2    
+#    
+#    
+    # calculate production for each ensemble member
+    ens_prods = np.zeros((len(all_ts), 25))
+    for i in range(25):
+        ens_cols = ['Tout24hdiff' + str(i), 'vWind24hdiff' + str(i),\
+                    'sunRad24hdiff' + str(i), 'prod24h_before']
+        ens_params = pd.Series({'Tout24hdiff' + str(i):res.params['Tout24hdiff'],
+                                'vWind24hdiff' + str(i):res.params['vWind24hdiff'],
+                                'sunRad24hdiff' + str(i):res.params['sunRad24hdiff'],
+                                'prod24h_before':res.params['prod24h_before']})
+        ens_prods[:,i] = linear_map(all_ens_data, ens_params, ens_cols)    
+    
+    
+       
+    # calculate combined confint
+    vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
+    mean_conf_int_spread = (vali_resid.quantile(0.95) - vali_resid.quantile(0.05))/2
+    model_std = (1./1.9599)*mean_conf_int_spread*np.ones(len(all_ts))
+    ens_std = ens_prods.std(axis=1)
+    combined_std = np.sqrt(model_std**2 + ens_std**2)
+    all_prod_model = np.concatenate([res.fittedvalues, linear_map(vali_data, res.params, cols)])
+    combined_ub95 = all_prod_model + 1.9599*combined_std
+    combined_lb95 = all_prod_model - 1.9599*combined_std 
+    
+    # plot confint
+    ax1.fill_between(all_ts, combined_lb95, combined_ub95, label='Combined 95% conf. int.')
+    ax1.fill_between(all_ts, all_prod_model - 1.9599*ens_std, all_prod_model + 1.9599*ens_std, facecolor='grey', label='Ensemble 95% conf. int.')
+    
+    # plot ensempble models    
+    ax1.plot_date(all_ts, ens_prods, '-', lw=0.5)    
+    
+    ax1.plot_date(ts1, y, 'k-', lw=2, label='Actual production')
+    ax1.plot_date(ts1, res.fittedvalues,'r-', lw=2, label='Model on ensemble mean')
+         
+    ax1.plot_date(ts2, vali_data['prod'], 'k-', lw=2, label='')
+    ax1.plot_date(ts2, linear_map(vali_data, res.params, cols), 'r-', lw=2)
+    ax1.set_ylabel('[MW]')
+    ax1.legend(loc=2)
+    ax1.set_ylim([0,1100])
+    
+    
+    ax2.plot_date(ts1, res.resid, '-', label='Residual, fitted data')
+    ax2.plot_date(ts2, vali_resid, '-', label='Residual, validation data')
+    ax2.set_ylabel('[MW]')
+    ax2.legend(loc=2)
+    ax2.set_ylim([-550, 550])
+    print "MAE = " + str(mae(vali_resid))
+    print "MAPE = " + str(mape(vali_resid, vali_data['prod']))
+    print "RMSE = " + str(rmse(vali_resid))
+    print "ME = " + str(np.mean(vali_resid))
+    
+    print "MAE (fit) = " + str(mae(res.resid))
+    print "MAPE (fit) = " + str(mape(res.resid, fit_data['prod']))
+    print "RMSE (fit)= " + str(rmse(res.resid))
+    print "ME (fit)= " + str(np.mean(res.resid))
+
+    plt.savefig('figures/ens_prod_models_v2.pdf', dpi=600) 
+    plt.figure()
+    plt.plot_date(all_ts, ens_std)
+    plt.ylabel('Std. of ensemble production models [MW]')
+    plt.savefig('figures/std_ens_prod_models.pdf', dpi=600) 
+    # 
+    
+    vali_ens_std = ens_std[len(ts1):]
+    sns.jointplot(x=pd.Series(vali_ens_std), y=np.abs(vali_resid))
+    sns.jointplot(x=vali_data['prod'], y=pd.Series(linear_map(vali_data, res.params, cols)))
+   
+        
+    return vali_data, fit_data, res, vali_resid, vali_ens_std
