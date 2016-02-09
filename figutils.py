@@ -277,7 +277,7 @@ def second_ens_prod_fig():
     cols = ['prod24h_before', 'Tout24hdiff', 'vWind24hdiff', 'sunRad24hdiff']
         
     ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
-    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,1,31,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
     
     #load the data
     fit_data = ens.repack_ens_mean_as_df()
@@ -446,5 +446,19 @@ def second_ens_prod_fig():
     print "ME (EO3_fit)= " + str(np.mean(EO3_err_fit))
      
     sns.jointplot(x=pd.Series(vali_ens_std), y=np.abs(EO3_err))
+    
+    plt.figure(figsize=(20,10))
+    plt.subplot(2,1,1)
+    plt.plot_date(all_ts, combined_std/combined_std.max(), '-')
+    plt.ylabel('Model + ensemble uncertainty \n [normalized]')
+    plt.ylim(0,1)    
+    plt.subplot(2,1,2)
+    plt.plot_date(all_ts, (1-0.2*combined_std/combined_std.max()), '-', label='Dynamic setpoint')
+    plt.plot_date(all_ts, 0.8*np.ones(len(all_ts)), '--', label='Static setpoint')
+    plt.ylabel('Setpoint for pump massflow \n temperature [fraction of max pump cap]')
+    plt.legend()
+    plt.ylim(.7,1)
+    plt.savefig('figures/setpoint.pdf')
+    np.savez('combined_std', combined_std=combined_std, timesteps=all_ts)
     
     return vali_data, fit_data, res, combined_std
