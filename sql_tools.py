@@ -77,7 +77,7 @@ def fetch_production(from_time, to_time):
     return np.array(production, dtype=float)
     
 def fetch_EO3_midnight_forecast(from_time, to_time):
-    #%% load data from Energy Opticon forecast
+    # load data from Energy Opticon forecast
     conn = connect()
     sql_query = """
     USE [EDW_Stage]
@@ -98,3 +98,24 @@ def fetch_EO3_midnight_forecast(from_time, to_time):
     Opt_forecast = zip(*data_unique_forecast)[1]
     
     return np.array(Opt_forecast, dtype=float)
+    
+    
+def fetch_price(from_time, to_time, price_name='Timenspris'):
+    """ Price_name should be either "Timenspris", "VariabelTimenspris"
+        or "TimensprisMovingAVG".
+        
+        """
+        
+    conn = connect()
+    sql_query = """ USE [DM_VT]
+                    SELECT [Tid_Key]
+                          ,[%s]
+                      FROM [dbo].[vFact_Timepris_Doegn]
+                      WHERE Tid_Key BETWEEN '%s' AND  '%s'
+                      ORDER BY Tid_Key""" % (price_name, ens.timestamp_str(from_time), ens.timestamp_str(to_time))
+                      
+    data = extractdata(conn, sql_query)
+    timestamps, price = zip(*data)
+    assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    
+    return np.array(price, dtype=float)  
