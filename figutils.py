@@ -374,14 +374,16 @@ def second_ens_prod_fig():
     
        
     # calculate combined confint
-    vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
-    mean_conf_int_spread = (vali_resid.quantile(0.95) - vali_resid.quantile(0.05))/2
-    model_std = (1./1.9599)*mean_conf_int_spread*np.ones(len(all_ts))
     ens_std = ens_prods.std(axis=1)
-    combined_std = np.sqrt(model_std**2 + ens_std**2)
+    vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
+    vali_resid_corrig = vali_resid - np.sign(vali_resid)*1.9599*ens_std[len(ts1):]
+    mean_conf_int_spread = (vali_resid_corrig.quantile(0.95) - vali_resid_corrig.quantile(0.05))/2
+    
+    
+    combined_conf_int = mean_conf_int_spread + 1.9599*ens_std
     all_prod_model = np.concatenate([res.fittedvalues, linear_map(vali_data, res.params, cols)])
-    combined_ub95 = all_prod_model + 1.9599*combined_std
-    combined_lb95 = all_prod_model - 1.9599*combined_std 
+    combined_ub95 = all_prod_model + combined_conf_int
+    combined_lb95 = all_prod_model - combined_conf_int 
     
     # plot confint
     ax1.fill_between(all_ts, combined_lb95, combined_ub95, label='Combined 95% conf. int.')
@@ -449,16 +451,16 @@ def second_ens_prod_fig():
     
     plt.figure(figsize=(20,10))
     plt.subplot(2,1,1)
-    plt.plot_date(all_ts, combined_std/combined_std.max(), '-')
+    plt.plot_date(all_ts, combined_conf_int/combined_conf_int.max(), '-')
     plt.ylabel('Model + ensemble uncertainty \n [normalized]')
     plt.ylim(0,1)    
     plt.subplot(2,1,2)
-    plt.plot_date(all_ts, (1-0.2*combined_std/combined_std.max()), '-', label='Dynamic setpoint')
+    plt.plot_date(all_ts, (1-0.2*combined_conf_int/combined_conf_int.max()), '-', label='Dynamic setpoint')
     plt.plot_date(all_ts, 0.8*np.ones(len(all_ts)), '--', label='Static setpoint')
     plt.ylabel('Setpoint for pump massflow \n temperature [fraction of max pump cap]')
     plt.legend()
     plt.ylim(.7,1)
     plt.savefig('figures/setpoint.pdf')
-    np.savez('combined_std', combined_std=combined_std, timesteps=all_ts)
+    np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
     
-    return vali_data, fit_data, res, combined_std
+    return vali_data, fit_data, res, ens_std, vali_resid

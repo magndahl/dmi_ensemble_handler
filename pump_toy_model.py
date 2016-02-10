@@ -52,11 +52,11 @@ def plot_const_vs_dym_cap(mass_flow_full_cap_cw):
     plt.close('all')   
     mass_flow_100pct_cap = mass_flow_full_cap_cw/specific_heat_water
 
-    combined_std = np.load('combined_std.npz')['combined_std']
+    combined_conf_int = np.load('combined_conf_int.npz')['combined_conf_int']
     prod = np.concatenate([sq.fetch_production(ts1[0], ts1[-1]), sq.fetch_production(ts2[0], ts2[-1])])
     PTM_const = PumpToyModel(delivered_heat=prod, mass_flow_cap=mass_flow_100pct_cap*mass_flow_cap_pct_of_full*np.ones_like(prod))
     PTM_const.calc_mass_flow_and_T_sup()
-    PTM_dyn = PumpToyModel(delivered_heat=prod, mass_flow_cap=mass_flow_100pct_cap*(1-(1-mass_flow_cap_pct_of_full)*combined_std/combined_std.max())*np.ones_like(prod))
+    PTM_dyn = PumpToyModel(delivered_heat=prod, mass_flow_cap=mass_flow_100pct_cap*(1-(1-mass_flow_cap_pct_of_full)*combined_conf_int/combined_conf_int.max())*np.ones_like(prod))
     PTM_dyn.calc_mass_flow_and_T_sup()
     
     plt.figure(figsize=(20,10))
