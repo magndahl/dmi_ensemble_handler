@@ -118,4 +118,33 @@ def fetch_price(from_time, to_time, price_name='Timenspris'):
     timestamps, price = zip(*data)
     assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
     
-    return np.array(price, dtype=float)  
+    return np.array(price, dtype=float)
+    
+    
+def fetch_5min_vals_from_PIno(PIno, from_time, to_time):
+    conn = connect()
+    sql_query = """USE [EDW_Stage]
+                    SELECT [Pinr]
+                    ,[TimeStamp]
+                    ,[dValue]
+                    FROM [sro].[v5MinSerier_Udtræk]
+                    WHERE [Pinr]='%s' AND TimeStamp BETWEEN '%s' AND '%s'"""%(PIno, str(from_time), str(to_time))
+    data = extractdata(conn, sql_query)
+    PI, timestamps, vals= zip(*data)
+    
+    return timestamps, np.array(vals, dtype=float)
+    
+
+def fetch_hourly_vals_from_PIno(PIno, from_time, to_time):
+    conn = connect()
+    sql_query = """USE [EDW_Stage]
+                    SELECT [Pinr]
+                    ,[TimeStamp]
+                    ,[dValue]
+                    FROM [sro].[vHourSerier_Udtræk]
+                    WHERE [Pinr]='%s' AND TimeStamp BETWEEN '%s' AND '%s'"""%(PIno, str(from_time), str(to_time))
+    data = extractdata(conn, sql_query)
+    PI, timestamps, vals= zip(*data)
+    assert(list(timestamps)==ens.gen_hourly_timesteps(from_time, to_time)), "Timesteps are not hour by hour"
+    
+    return np.array(vals, dtype=float)
