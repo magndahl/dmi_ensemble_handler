@@ -60,3 +60,6 @@ ensemble_and_prod.pkl
 *.png
 prod_exploration.py
 combined_std.npz
+gurobi.log
+combined_conf_int.npz
+combined_conf_int.npz

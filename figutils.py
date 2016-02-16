@@ -5,18 +5,51 @@ Created on Thu Jan 07 14:41:35 2016
 @author: Magnus Dahl
 """
 import datetime as dt
+
+import seaborn as sns
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
+from matplotlib.dates import DateFormatter
+from cycler import cycler
+
 import numpy as np
 import pandas as pd
-import seaborn as sns
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
+
 import ensemble_tools as ens
 import sql_tools as sq
 from model_selection import linear_map, mlin_regression, mae, mape, rmse
-from statsmodels.sandbox.regression.predstd import wls_prediction_std
+
+# unicode charecters
+uni_tothethird = u'\u00B3'
+uni_degree = u'\u00B0'
+uni_squared = u'\u00B2'
 
 
 weathervars = ['Tout', 'vWind', 'hum', 'sunRad']
+# column and double column with for Elsevier journals
+colwidth = 3.346 # inches
+dcolwidth = 6.629 # inches
 
+#colors
+blue = '#134b7c'
+yellow = '#f8ca00'
+orange = '#e97f02'
+brown = '#876310'
+green = '#4a8e05'
+lightgreen = '#b9f73e'#'#c9f76f'
+red = '#ae1215'
+purple = '#4f0a3d'
+darkred= '#4f1215'
+pink = '#bd157d'
+lightpink = '#d89bc2'
+aqua = '#47fff9'
+darkblue = '#09233b'
+lightblue = '#8dc1e0'
+grayblue = '#4a7fa2'
+
+color_cycle = [blue, red, orange, purple, green, pink, lightblue, darkred, yellow, aqua]
 
 def most_recent_ens_timeseries(start_stop=(dt.datetime(2015,12,16,0), dt.datetime(2016,1,19,0)), pointcode=71699, shift_steno_one=False):
     """ star_stop can be a tupple with 2 date tim objects. The first
@@ -461,6 +494,359 @@ def second_ens_prod_fig():
     plt.legend()
     plt.ylim(.7,1)
     plt.savefig('figures/setpoint.pdf')
-    np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
+
     
     return vali_data, fit_data, res, ens_std, vali_resid
+
+
+## these functions are for the first article and the comment show where they belong (fig2, fig3, fig 4 etc)
+def weather_forecast_ensemble(): # figure 2
+    plt.close('all')
+    ts = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
+    ens_data = ens.load_ens_timeseries_as_df(ts_start=ts[0], ts_end=ts[-1],\
+                                             weathervars=['Tout', 'vWind', 'sunRad'])
+    fig, axes = plt.subplots(3,1, sharex=True, figsize=(colwidth, 1.8*colwidth))
+    plt.xticks(size=5)
+    
+    ylabels = [u'Outside temperature [%sC]'%uni_degree, 'Wind speed [m/s]', u'Solar irradiance [W/m%s]'%uni_squared]
+    
+    for  ax, v, cshift, ylab in zip(axes, ['Tout', 'vWind', 'sunRad'], (15,23,6), ylabels):
+        color_list = plt.cm.Dark2(np.roll(np.linspace(0, 1, 25), cshift))        
+        ax.set_prop_cycle(cycler('color',color_list))
+        ax.plot_date(ts, ens_data[[v + str(i) for i in range(25)]], '-', lw=0.5)
+        ax.set_ylabel(ylab, size=8)
+        ax.tick_params(axis='y', which='major', labelsize=8)
+        plt.box(True)
+    plt.tight_layout()
+    axes[-1].xaxis.set_major_formatter(DateFormatter('%b %d') )
+    fig.savefig('figures/first_articlefigs/weather_forecast_ensemble.pdf')
+    return ens_data, axes
+
+
+def production_model(): # figure 3
+    
+    plt.close('all')
+    cols = ['prod24h_before', 'Tout24hdiff', 'vWind24hdiff', 'sunRad24hdiff']
+        
+    ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
+    
+    #load the data
+    fit_data = ens.repack_ens_mean_as_df()
+    fit_data['prod24h_before'] = sq.fetch_production(ts1[0]+dt.timedelta(days=-1), ts1[-1]+dt.timedelta(days=-1))
+    
+    fit_data['Tout24hdiff'] = fit_data['Tout'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout']).mean(axis=1)
+    fit_data['vWind24hdiff'] = fit_data['vWind'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['vWind']).mean(axis=1)
+    fit_data['sunRad24hdiff'] = fit_data['sunRad'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['sunRad']).mean(axis=1)
+                                    
+    vali_data = ens.repack_ens_mean_as_df(ts2[0], ts2[-1])
+    vali_data['prod24h_before'] = sq.fetch_production(ts2[0]+dt.timedelta(days=-1), ts2[-1]+dt.timedelta(days=-1))
+    vali_data['Tout24hdiff'] = vali_data['Tout'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout']).mean(axis=1)
+    vali_data['vWind24hdiff'] = vali_data['vWind'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['vWind']).mean(axis=1)
+    vali_data['sunRad24hdiff'] = vali_data['sunRad'] \
+                                - ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['sunRad']).mean(axis=1)
+    
+    # correct error in production:
+    new_val = (vali_data['prod'][116] +vali_data['prod'][116])/2
+    vali_data['prod'][116] = new_val
+    vali_data['prod'][117] = new_val
+    vali_data['prod24h_before'][116+24] = new_val
+    vali_data['prod24h_before'][117+24] = new_val
+    
+    
+ 
+    # do the fit
+    X = fit_data[cols]
+    y = fit_data['prod']
+    res = mlin_regression(y, X, add_const=False)    
+
+    fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth), gridspec_kw={'height_ratios':[4,1]})
+
+    # load ensemble data
+    ens_data1 = ens.load_ens_timeseries_as_df(ts_start=ts1[0], ts_end=ts1[-1],\
+                                             weathervars=['Tout', 'vWind', 'sunRad'])
+    ens_data1['prod24h_before'] = fit_data['prod24h_before']
+    ens_data1_24h_before =  ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts1[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts1[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout', 'vWind', 'sunRad']) 
+    ens_data2 = ens.load_ens_timeseries_as_df(ts_start=ts2[0], ts_end=ts2[-1],\
+                                             weathervars=['Tout', 'vWind', 'sunRad'])
+    ens_data2['prod24h_before'] = vali_data['prod24h_before']
+    ens_data2_24h_before = ens.load_ens_timeseries_as_df(\
+                                    ts_start=ts2[0]+dt.timedelta(days=-1),\
+                                    ts_end=ts2[-1]+dt.timedelta(days=-1), \
+                                    weathervars=['Tout', 'vWind', 'sunRad']) 
+    for i in range(25):
+        for v in ['Tout', 'vWind', 'sunRad']:
+            key_raw = v + str(i)
+            key_diff = v + '24hdiff' + str(i)
+            ens_data1[key_diff] = ens_data1[key_raw] - ens_data1_24h_before[key_raw]
+            ens_data2[key_diff] = ens_data2[key_raw] - ens_data2_24h_before[key_raw]
+
+    
+    all_ens_data = pd.concat([ens_data1, ens_data2])
+    all_ts = ts1 + ts2    
+#    
+#    
+    # calculate production for each ensemble member
+    ens_prods = np.zeros((len(all_ts), 25))
+    for i in range(25):
+        ens_cols = ['Tout24hdiff' + str(i), 'vWind24hdiff' + str(i),\
+                    'sunRad24hdiff' + str(i), 'prod24h_before']
+        ens_params = pd.Series({'Tout24hdiff' + str(i):res.params['Tout24hdiff'],
+                                'vWind24hdiff' + str(i):res.params['vWind24hdiff'],
+                                'sunRad24hdiff' + str(i):res.params['sunRad24hdiff'],
+                                'prod24h_before':res.params['prod24h_before']})
+        ens_prods[:,i] = linear_map(all_ens_data, ens_params, ens_cols)    
+    
+    
+       
+    # calculate combined confint
+    ens_std = ens_prods.std(axis=1)
+    vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
+    vali_resid_corrig = vali_resid - np.sign(vali_resid)*1.9599*ens_std[len(ts1):]
+    mean_conf_int_spread = (vali_resid_corrig.quantile(0.95) - vali_resid_corrig.quantile(0.05))/2
+    
+    
+    combined_conf_int = mean_conf_int_spread + 1.9599*ens_std
+    all_prod_model = np.concatenate([res.fittedvalues, linear_map(vali_data, res.params, cols)])
+    combined_ub95 = all_prod_model + combined_conf_int
+    combined_lb95 = all_prod_model - combined_conf_int 
+    
+    # plot confint
+    ax1.fill_between(all_ts[len(ts1):], combined_lb95[len(ts1):], combined_ub95[len(ts1):], label='Combined 95% conf. int.')
+    ax1.fill_between(all_ts[len(ts1):], all_prod_model[len(ts1):] - 1.9599*ens_std[len(ts1):], all_prod_model[len(ts1):] + 1.9599*ens_std[len(ts1):], facecolor='grey', label='Weather ensemble 95% conf. int.')
+    
+    # plot ensempble models    
+    ax1.plot_date(all_ts[len(ts1):], ens_prods[len(ts1):], '-', lw=0.5)    
+
+    ax1.plot_date(ts2, vali_data['prod'], 'k-', lw=2, label='Historical production')
+    ax1.plot_date(ts2, linear_map(vali_data, res.params, cols), '-', c=red, lw=2, label='Production model')
+    ax1.set_ylabel('Production [MW]', size=8)
+    ax1.tick_params(axis='both', which='major', labelsize=8)
+    ax1.xaxis.set_major_formatter(DateFormatter('%b %d') )    
+    ax1.legend(loc=1, prop={'size':8})
+    ax1.set_ylim([300,1100])
+    
+    ax2.fill_between(ts2, combined_conf_int[len(ts1):]/combined_conf_int.max()) 
+    ax2.fill_between(ts2, 1.9599*ens_std[len(ts1):]/combined_conf_int.max(), facecolor='grey')
+    ax2.set_ylabel('Conf. int.\n[normalized]', size=8)
+    ax2.tick_params(axis='y', which='major', labelsize=8)
+    
+    fig.tight_layout()
+    
+    
+    print "MAE = " + str(mae(vali_resid))
+    print "MAPE = " + str(mape(vali_resid, vali_data['prod']))
+    print "RMSE = " + str(rmse(vali_resid))
+    print "ME = " + str(np.mean(vali_resid))
+    
+    print "MAE (fit) = " + str(mae(res.resid))
+    print "MAPE (fit) = " + str(mape(res.resid, fit_data['prod']))
+    print "RMSE (fit)= " + str(rmse(res.resid))
+    print "ME (fit)= " + str(np.mean(res.resid))
+
+    plt.savefig('figures/first_articlefigs/production_model.pdf', dpi=400) 
+
+   
+    EO3_fc1 = sq.fetch_EO3_midnight_forecast(ts1[0], ts1[-1])
+    EO3_fc2 = sq.fetch_EO3_midnight_forecast(ts2[0], ts2[-1])
+    EO3_err = EO3_fc2-vali_data['prod']
+    EO3_err_fit = EO3_fc1-fit_data['prod']
+    print "MAE (EO3) = " + str(mae(EO3_err))
+    print "MAPE (EO3) = " + str(mape(EO3_err, vali_data['prod']))
+    print "RMSE (EO3)= " + str(rmse(EO3_err))
+    print "ME (EO3)= " + str(np.mean(EO3_err))
+    
+    print "MAE (EO3_fit) = " + str(mae(EO3_err_fit))
+    print "MAPE (EO3_fit) = " + str(mape(EO3_err_fit, fit_data['prod']))
+    print "RMSE (EO3_fit)= " + str(rmse(EO3_err_fit))
+    print "ME (EO3_fit)= " + str(np.mean(EO3_err_fit))
+     
+    np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
+
+    return res
+    
+def hoerning_pump_model(): # figure 4
+    # simple model
+    T1 = 68.5
+    a2 = 15.5
+    a3 = 2.1
+    b2 = 295-a2*T1
+    b3 = 340-a3*71.4
+    
+    def Q_from_cons_lin_piece(cons, a, b):
+        B = -(b+a*T_ret)/a
+        C = -cons/(specific_heat_water*density_water)
+        A = 1/a
+    
+        Qplus = (-B+np.sqrt(B**2 - 4*A*C))/(2*A)
+        
+        return Qplus
+    
+    def get_Tsup_and_Q(cons, Q_ub):
+        # try lowes possible T    
+        Q = cons/(specific_heat_water*density_water*(T1 - T_ret))
+        if Q <= 295:
+            return T1, Q
+        elif Q > 295:
+            Q = Q_from_cons_lin_piece(cons, a2, b2)
+            if Q <= Q_ub*(340./360):
+                T = (Q - b2)/a2  
+                return T, Q
+            elif Q >= Q_ub*(340./360):
+                b3_adjusted = b3 + (Q_ub*(340./360) - 340)
+                Q = Q_from_cons_lin_piece(cons, a3, b3_adjusted)
+                if Q <= Q_ub:
+                    T = (Q - b3_adjusted)/a3
+                    return T, Q
+                elif Q > Q_ub:
+                    Q = Q_ub
+                    T = cons/(specific_heat_water*density_water*Q) + T_ret
+                    return T, Q
+                
+    plt.close('all')
+
+    fig, [ax1, ax2] = plt.subplots(2,1,sharex=True, sharey=True)
+    ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
+    all_ts = ts1 + ts2
+    PI_T_sup = '4.146.120.29.HA.101'
+    PI_Q = 'K.146A.181.02.HA.101'
+    specific_heat_water = 1.17e-6 # MWh/kgKelvin
+    density_water = 980 # kg/m3 at 65 deg C
+    T_ret = 36.5
+    df = pd.DataFrame()
+    df['T_sup']=np.concatenate([sq.fetch_hourly_vals_from_PIno(PI_T_sup, ts1[0], \
+            ts1[-1]),sq.fetch_hourly_vals_from_PIno(PI_T_sup, ts2[0], ts2[-1])])
+    df['Q']=np.concatenate([sq.fetch_hourly_vals_from_PIno(PI_Q, ts1[0], ts1[-1]),\
+            sq.fetch_hourly_vals_from_PIno(PI_Q, ts2[0], ts2[-1])])
+    df['ts'] = all_ts
+    df['cons'] = specific_heat_water*density_water*df['Q']*(df['T_sup']-T_ret)
+    
+    
+    model_conf_int = np.load('combined_conf_int.npz')['combined_conf_int']
+    assert(list(np.load('combined_conf_int.npz')['timesteps'])==all_ts), "confidence intervals don't have matching time steps"
+    const_Q_ub = 360
+    Q_const_cap = []
+    T_sup_const_cap = []
+    Q_dyn_cap = []
+    T_sup_dyn_cap = []
+    dyn_Q_ub = []
+    for c, model_uncertainty in zip(df['cons'], model_conf_int):
+        T_const, Q_const = get_Tsup_and_Q(c, const_Q_ub)
+        Q_const_cap.append(Q_const)
+        T_sup_const_cap.append(T_const)
+
+        Q_ub = 410 - (410-const_Q_ub)*(model_uncertainty/np.max(model_conf_int))
+        dyn_Q_ub.append(Q_ub)
+        T_dyn, Q_dyn = get_Tsup_and_Q(c, Q_ub)
+        Q_dyn_cap.append(Q_dyn)
+        T_sup_dyn_cap.append(T_dyn)
+        
+    
+    dT=0.1
+    ax1.fill_between([65+dT,95-dT], [410, 410], [360, 360], facecolor=red, alpha=0.25)
+    ax1.fill_between([65+dT,95-dT], [360, 360],[340, 340], facecolor=yellow, alpha=0.25)
+    ax1.plot([65+dT,95-dT], [410, 410], '--', c=red, lw=2)
+    ax1.text(79,415, 'Maximum pump capacity', size=8)
+    im = ax1.scatter(T_sup_const_cap, Q_const_cap, c=df['cons'], cmap=plt.cm.BuPu)
+    
+    ax2.scatter(T_sup_dyn_cap, Q_dyn_cap, c=df['cons'], cmap=plt.cm.BuPu)
+    ax2.plot([65+dT,95-dT], [410, 410], '--', c=red, lw=2)
+    ax2.text(79,415, 'Maximum pump capacity', size=8)
+    
+    cax, kw = mpl.colorbar.make_axes([ax1, ax2])
+    fig.colorbar(im, cax=cax)
+    cax.set_ylabel('Delivered heat [MW]',size=8)
+
+    ax2.set_xlabel(u'Supply temperature [%sC]'%uni_degree, size=8)
+    ax1.set_ylabel(u'Water flow rate [m%s/h]'%uni_tothethird, size=8)
+    ax2.set_ylabel(u'Water flow rate [m%s/h]'%uni_tothethird, size=8)
+    ax1.tick_params(axis='both', which='major', labelsize=8)
+    ax2.tick_params(axis='both', which='major', labelsize=8)
+    cax.tick_params(axis='y', which='major', labelsize=8)
+    ax1.set_xlim((65,95))
+    ax1.set_ylim((150,450))
+    
+    fig.set_size_inches(1.15*colwidth,1.6*colwidth)
+
+    fig.savefig('figures/first_articlefigs/hoerning_pump_model.pdf')
+    
+    return T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int
+    
+def Q_T_heatloss_timeseries(): # figure 5
+    T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int = hoerning_pump_model()
+    plt.close('all')
+    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth))
+    
+    ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
+    ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
+    
+    
+    red_area_lb1 = 410 - (410-360)*(model_conf_int[0:len(ts1)]/np.max(model_conf_int))
+    red_area_lb2 = 410 - (410-360)*(model_conf_int[len(ts1):]/np.max(model_conf_int))
+    yellow_area_lb1 = (340./360)*red_area_lb1
+    yellow_area_lb2 = (340./360)*red_area_lb2
+    ax1.fill_between(ts1, red_area_lb1, 410*np.ones(len(ts1)), facecolor=red, alpha=0.25)
+    ax1.fill_between(ts2, red_area_lb2, 410*np.ones(len(ts2)), facecolor=red, alpha=0.25)
+    ax1.fill_between(ts1, yellow_area_lb1, red_area_lb1, facecolor=yellow, alpha=0.25)
+    ax1.fill_between(ts2, yellow_area_lb2, red_area_lb2, facecolor=yellow, alpha=0.25)    
+    ax1.plot_date(ts1, Q_const_cap[0:len(ts1)], '-', c=red, label='Constant security margin')
+    ax1.plot_date(ts2, Q_const_cap[len(ts1):], '-', c=red)
+    ax1.plot_date(ts1, Q_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Dynamic security margin')
+    ax1.plot_date(ts2, Q_dyn_cap[len(ts1):], '-', c=green, lw=1)    
+    ax1.plot_date(ts1+ts2, 410*np.ones(len(ts1+ts2)), '--', c=red, lw=1)
+
+
+    ax2.plot_date(ts1, T_sup_const_cap[0:len(ts1)], '-', c=red, label='Constant security margin')
+    ax2.plot_date(ts2, T_sup_const_cap[len(ts1):], '-', c=red)
+    ax2.plot_date(ts1, T_sup_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Dynamic security margin')
+    ax2.plot_date(ts2, T_sup_dyn_cap[len(ts1):], '-', c=green, lw=1)
+    ax2.legend(loc=6, prop={'size':8})
+   
+    T_grnd = 6.4
+    heat_loss_reduction = 100*(1 - (np.array(T_sup_dyn_cap) - T_grnd)/(np.array(T_sup_const_cap) - T_grnd))
+    redu_heat_loss1 = heat_loss_reduction[0:len(ts1)]
+    redu_heat_loss2 = heat_loss_reduction[len(ts1):]
+    ax3.plot_date(ts1, redu_heat_loss1, '-', c=blue, lw=1)
+    ax3.plot_date(ts2, redu_heat_loss2, '-', c=blue, lw=1)
+    
+    ax3.xaxis.set_major_formatter(DateFormatter('%b %d \n %Y') )
+    ax1.tick_params(axis='y', which='major', labelsize=8)
+    ax1.set_ylim(150,450)
+    ax2.tick_params(axis='y', which='major', labelsize=8)
+    ax3.tick_params(axis='y', which='major', labelsize=8)
+    ax1.set_ylabel(u'Flow rate  [m%s/h]'%uni_tothethird, size=8)
+    ax2.set_ylabel(u'Supply\ntemperature [%sC]'%uni_degree, size=8)
+    ax3.set_ylabel('Heat loss\nreduction [%]', size=8)
+    
+    mjloc = mpl.ticker.MultipleLocator(1)
+    ax3.yaxis.set_major_locator(mjloc)
+    fig.tight_layout()
+    
+    fig.savefig('figures/first_articlefigs/Q_T_heatloss_timeseries.pdf')
