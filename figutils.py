@@ -686,7 +686,8 @@ def production_model(): # figure 3
     print "MAPE (EO3_fit) = " + str(mape(EO3_err_fit, fit_data['prod']))
     print "RMSE (EO3_fit)= " + str(rmse(EO3_err_fit))
     print "ME (EO3_fit)= " + str(np.mean(EO3_err_fit))
-     
+    
+    print np.min(combined_conf_int[len(ts1):]/combined_conf_int.max())
     np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
 
     return res
