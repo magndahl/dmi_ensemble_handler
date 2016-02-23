@@ -690,7 +690,11 @@ def production_model(): # figure 3
     print np.min(combined_conf_int[len(ts1):]/combined_conf_int.max())
     np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
 
-    return res
+    print "Corr coeff: vali ", np.corrcoef(vali_data['prod'],linear_map(vali_data, res.params, cols))[0,1]
+    print "Corr coeff: vali EO3 ", np.corrcoef(vali_data['prod'], EO3_fc2)[0,1]
+    print "Corr coeff: fit ", np.corrcoef(fit_data['prod'],res.fittedvalues)[0,1]
+    print "Corr coeff: fit EO3 ", np.corrcoef(fit_data['prod'], EO3_fc1)[0,1]
+    
     
 def hoerning_pump_model(): # figure 4
     # simple model
