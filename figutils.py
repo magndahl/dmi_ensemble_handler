@@ -634,16 +634,21 @@ def production_model(): # figure 3
     ens_std = ens_prods.std(axis=1)
     vali_resid = linear_map(vali_data, res.params, cols) - vali_data['prod']
     vali_resid_corrig = vali_resid - np.sign(vali_resid)*1.9599*ens_std[len(ts1):]
-    mean_conf_int_spread = (vali_resid_corrig.quantile(0.95) - vali_resid_corrig.quantile(0.05))/2
+    #mean_conf_int_spread = (vali_resid_corrig.quantile(0.95) - vali_resid_corrig.quantile(0.05))/2 # this conf_int is not used anymore
+
+
+    fit_resid = res.resid
+    fit_resid_corrig = fit_resid - np.sign(fit_resid)*1.9599*ens_std[0:len(ts1)]
+    conf_int_spread_lower = - fit_resid_corrig.quantile(0.025)
+    conf_int_spread_higher = fit_resid_corrig.quantile(0.975) 
     
-    
-    combined_conf_int = mean_conf_int_spread + 1.9599*ens_std
+    combined_conf_ints = conf_int_spread_lower + conf_int_spread_higher + 2*1.9599*ens_std
     all_prod_model = np.concatenate([res.fittedvalues, linear_map(vali_data, res.params, cols)])
-    combined_ub95 = all_prod_model + combined_conf_int
-    combined_lb95 = all_prod_model - combined_conf_int 
+    combined_ub95 = all_prod_model + conf_int_spread_higher + 1.9599*ens_std
+    combined_lb95 = all_prod_model - (conf_int_spread_lower + 1.9599*ens_std)
     
     # plot confint
-    ax1.fill_between(all_ts[len(ts1):], combined_lb95[len(ts1):], combined_ub95[len(ts1):], label='Combined 95% conf. int.')
+    ax1.fill_between(all_ts[len(ts1):], combined_lb95[len(ts1):], combined_ub95[len(ts1):], label='95% prediction intervals')
     ax1.fill_between(all_ts[len(ts1):], all_prod_model[len(ts1):] - 1.9599*ens_std[len(ts1):], all_prod_model[len(ts1):] + 1.9599*ens_std[len(ts1):], facecolor='grey', label='Weather ensemble 95% conf. int.')
     
     # plot ensempble models    
@@ -657,13 +662,16 @@ def production_model(): # figure 3
     ax1.legend(loc=1, prop={'size':8})
     ax1.set_ylim([300,1100])
     
-    ax2.fill_between(ts2, combined_conf_int[len(ts1):]/combined_conf_int.max()) 
-    ax2.fill_between(ts2, 1.9599*ens_std[len(ts1):]/combined_conf_int.max(), facecolor='grey')
-    ax2.set_ylabel('Conf. int.\n[normalized]', size=8)
+    N = conf_int_spread_higher + 1.9599*ens_std[len(ts1):].max()
+    ax2.fill_between(ts2, -(1.9599*ens_std[len(ts1):]+conf_int_spread_lower)/N, -1.9599*ens_std[len(ts1):]/N, alpha=0.5)
+    ax2.fill_between(ts2, -1.9599*ens_std[len(ts1):]/N, np.zeros(len(ts2)), facecolor='grey',alpha=0.5)
+    ax2.fill_between(ts2, 1.9599*ens_std[len(ts1):]/N, facecolor='grey')
+    ax2.fill_between(ts2, 1.9599*ens_std[len(ts1):]/N, (conf_int_spread_higher+1.9599*ens_std[len(ts1):])/N) 
+    ax2.set_ylabel('Prediction intervals \n[normalized]', size=8)
     ax2.tick_params(axis='y', which='major', labelsize=8)
     ax2.set_xlim(dt.datetime(2016,1,20,0), dt.datetime(2016,2,5,0))
     fig.tight_layout()
-    
+    print "Min_normalized pos conf bound. ", np.min(1.9599*ens_std[len(ts1):]/N+conf_int_spread_higher/N)
     
     print "MAE = " + str(mae(vali_resid))
     print "MAPE = " + str(mape(vali_resid, vali_data['prod']))
@@ -675,7 +683,7 @@ def production_model(): # figure 3
     print "RMSE (fit)= " + str(rmse(res.resid))
     print "ME (fit)= " + str(np.mean(res.resid))
     
-    print "Width of const blue band (MW)", mean_conf_int_spread
+    print "Width of const blue bands (MW)", conf_int_spread_lower, conf_int_spread_higher
 
     plt.savefig('figures/first_articlefigs/production_model.pdf', dpi=400) 
 
@@ -694,13 +702,19 @@ def production_model(): # figure 3
     print "RMSE (EO3_fit)= " + str(rmse(EO3_err_fit))
     print "ME (EO3_fit)= " + str(np.mean(EO3_err_fit))
     
-    print np.min(combined_conf_int[len(ts1):]/combined_conf_int.max())
-    np.savez('combined_conf_int', combined_conf_int=combined_conf_int, timesteps=all_ts)
+    print np.min(combined_conf_ints[len(ts1):]/combined_conf_ints.max())
+    np.savez('combined_conf_int', combined_conf_int=(conf_int_spread_higher+1.9599*ens_std), timesteps=all_ts)
 
     print "Corr coeff: vali ", np.corrcoef(vali_data['prod'],linear_map(vali_data, res.params, cols))[0,1]
     print "Corr coeff: vali EO3 ", np.corrcoef(vali_data['prod'], EO3_fc2)[0,1]
     print "Corr coeff: fit ", np.corrcoef(fit_data['prod'],res.fittedvalues)[0,1]
     print "Corr coeff: fit EO3 ", np.corrcoef(fit_data['prod'], EO3_fc1)[0,1]
+    
+    print "% of actual production in vali period above upper", float(len(np.where(vali_data['prod']>(conf_int_spread_higher+1.9599*ens_std[len(ts1):]+linear_map(vali_data, res.params, cols)))[0]))/len(ts2)
+    print "plus minus: ", 0.5/len(ts2)
+    
+    print "% of actual production in vali period below lower", float(len(np.where(vali_data['prod']<(linear_map(vali_data, res.params, cols)-(conf_int_spread_lower+1.9599*ens_std[len(ts1):])))[0]))/len(ts2)
+    print "plus minus: ", 0.5/len(ts2)
     
     return res, fit_data
     
