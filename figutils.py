@@ -5,11 +5,13 @@ Created on Thu Jan 07 14:41:35 2016
 @author: Magnus Dahl
 """
 import datetime as dt
+import operator
 
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from matplotlib.patches import Polygon
 from matplotlib.dates import DateFormatter
 from cycler import cycler
 
@@ -48,6 +50,7 @@ aqua = '#47fff9'
 darkblue = '#09233b'
 lightblue = '#8dc1e0'
 grayblue = '#4a7fa2'
+darkgrey = '#333333'
 
 color_cycle = [blue, red, orange, purple, green, pink, lightblue, darkred, yellow, aqua]
 
@@ -505,7 +508,7 @@ def weather_forecast_ensemble(): # figure 2
     ts = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
     ens_data = ens.load_ens_timeseries_as_df(ts_start=ts[0], ts_end=ts[-1],\
                                              weathervars=['Tout', 'vWind', 'sunRad'])
-    fig, axes = plt.subplots(3,1, sharex=True, figsize=(colwidth, 1.8*colwidth))
+    fig, axes = plt.subplots(3,1, sharex=True, figsize=(colwidth, 1.65*colwidth))
     plt.xticks(size=5)
     
     ylabels = [u'Outside temperature [%sC]'%uni_degree, 'Wind speed [m/s]', u'Solar irradiance [W/m%s]'%uni_squared]
@@ -513,12 +516,14 @@ def weather_forecast_ensemble(): # figure 2
     for  ax, v, cshift, ylab in zip(axes, ['Tout', 'vWind', 'sunRad'], (15,23,6), ylabels):
         color_list = plt.cm.Dark2(np.roll(np.linspace(0, 1, 25), cshift))        
         ax.set_prop_cycle(cycler('color',color_list))
-        ax.plot_date(ts, ens_data[[v + str(i) for i in range(25)]], '-', lw=0.5)
+        v_ens_data = ens_data[[v + str(i) for i in range(25)]]
+        ax.plot_date(ts, v_ens_data, '-', lw=0.5)
         ax.set_ylabel(ylab, size=8)
         ax.tick_params(axis='y', which='major', labelsize=8)
         plt.box(True)
     plt.tight_layout()
     axes[-1].xaxis.set_major_formatter(DateFormatter('%b %d') )
+    axes[-1].set_xlim(dt.datetime(2016,1,20,0), dt.datetime(2016,2,5,0))
     fig.savefig('figures/first_articlefigs/weather_forecast_ensemble.pdf')
     return ens_data, axes
 
@@ -656,7 +661,7 @@ def production_model(): # figure 3
     ax2.fill_between(ts2, 1.9599*ens_std[len(ts1):]/combined_conf_int.max(), facecolor='grey')
     ax2.set_ylabel('Conf. int.\n[normalized]', size=8)
     ax2.tick_params(axis='y', which='major', labelsize=8)
-    
+    ax2.set_xlim(dt.datetime(2016,1,20,0), dt.datetime(2016,2,5,0))
     fig.tight_layout()
     
     
@@ -669,6 +674,8 @@ def production_model(): # figure 3
     print "MAPE (fit) = " + str(mape(res.resid, fit_data['prod']))
     print "RMSE (fit)= " + str(rmse(res.resid))
     print "ME (fit)= " + str(np.mean(res.resid))
+    
+    print "Width of const blue band (MW)", mean_conf_int_spread
 
     plt.savefig('figures/first_articlefigs/production_model.pdf', dpi=400) 
 
@@ -694,6 +701,8 @@ def production_model(): # figure 3
     print "Corr coeff: vali EO3 ", np.corrcoef(vali_data['prod'], EO3_fc2)[0,1]
     print "Corr coeff: fit ", np.corrcoef(fit_data['prod'],res.fittedvalues)[0,1]
     print "Corr coeff: fit EO3 ", np.corrcoef(fit_data['prod'], EO3_fc1)[0,1]
+    
+    return res, fit_data
     
     
 def hoerning_pump_model(): # figure 4
@@ -777,6 +786,10 @@ def hoerning_pump_model(): # figure 4
     dT=0.1
     ax1.fill_between([65+dT,95-dT], [410, 410], [360, 360], facecolor=red, alpha=0.25)
     ax1.fill_between([65+dT,95-dT], [360, 360],[340, 340], facecolor=yellow, alpha=0.25)
+    ax1.fill_between([T1, 71.4, 80.9, 100], [295, 340, 360, 360], color='k', edgecolor='k', alpha=0.2, linewidth=1)
+    ax2.fill_between([65+dT,95-dT], [410, 410], [360, 360], facecolor=red, alpha=0.25)
+    ax2.fill_between([65+dT,95-dT], [360, 360],[340, 340], facecolor=yellow, alpha=0.25)
+    ax2.fill_between([T1, 71.4, 80.9, 100], [295, 340, 360, 360], color='k', edgecolor='k', alpha=0.2, linewidth=1)
     ax1.plot([65+dT,95-dT], [410, 410], '--', c=red, lw=2)
     ax1.text(79,415, 'Maximum pump capacity', size=8)
     im = ax1.scatter(T_sup_const_cap, Q_const_cap, c=df['cons'], cmap=plt.cm.BuPu)
@@ -795,19 +808,40 @@ def hoerning_pump_model(): # figure 4
     ax1.tick_params(axis='both', which='major', labelsize=8)
     ax2.tick_params(axis='both', which='major', labelsize=8)
     cax.tick_params(axis='y', which='major', labelsize=8)
+    ax1.set_title('Scenario 1', size=10)
+    ax2.set_title('Scenario 2', size=10)
+
     ax1.set_xlim((65,95))
     ax1.set_ylim((150,450))
+    
     
     fig.set_size_inches(1.15*colwidth,1.6*colwidth)
 
     fig.savefig('figures/first_articlefigs/hoerning_pump_model.pdf')
     
-    return T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int
+    # This is a theoretical calculation in case the model uncertainty was 50% of what it is
+    statistical_conf_int = 50.90285 # this number is printed when production_model() is run (Width of const blue band (MW) ...)    
+    Q_dyn_cap_half_model_unc = []
+    T_sup_dyn_cap_half_model_unc = []
+    dyn_Q_ub_half_model_unc = []
+    reduced_model_conf_int =  model_conf_int-0.5*statistical_conf_int
+    for c, model_uncertainty in zip(df['cons'], reduced_model_conf_int):
+        Q_ub = 410 - (410-const_Q_ub)*(model_uncertainty/np.max(model_conf_int))
+        dyn_Q_ub_half_model_unc.append(Q_ub)
+        T_dyn, Q_dyn = get_Tsup_and_Q(c, Q_ub)
+        Q_dyn_cap_half_model_unc.append(Q_dyn)
+        T_sup_dyn_cap_half_model_unc.append(T_dyn)
+            
+    
+    return T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int, T_sup_dyn_cap_half_model_unc
+    
     
 def Q_T_heatloss_timeseries(): # figure 5
-    T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int = hoerning_pump_model()
+    T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int, T_sup_dyn_cap_half_model_unc = hoerning_pump_model()
     plt.close('all')
-    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth))
+    
+    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth), gridspec_kw={'height_ratios':[2,1,1]})
+    #fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth))
     
     ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
     ts2 = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
@@ -817,30 +851,41 @@ def Q_T_heatloss_timeseries(): # figure 5
     red_area_lb2 = 410 - (410-360)*(model_conf_int[len(ts1):]/np.max(model_conf_int))
     yellow_area_lb1 = (340./360)*red_area_lb1
     yellow_area_lb2 = (340./360)*red_area_lb2
-    ax1.fill_between(ts1, red_area_lb1, 410*np.ones(len(ts1)), facecolor=red, alpha=0.25)
-    ax1.fill_between(ts2, red_area_lb2, 410*np.ones(len(ts2)), facecolor=red, alpha=0.25)
-    ax1.fill_between(ts1, yellow_area_lb1, red_area_lb1, facecolor=yellow, alpha=0.25)
-    ax1.fill_between(ts2, yellow_area_lb2, red_area_lb2, facecolor=yellow, alpha=0.25)    
-    ax1.plot_date(ts1, Q_const_cap[0:len(ts1)], '-', c=red, label='Constant security margin')
+    limlw = 0.75
+    ax1.plot_date(ts1, red_area_lb1, '-', c=darkgrey, lw=limlw, label='Scenario 2 security margins')
+    ax1.plot_date(ts2, red_area_lb2, '-', c=darkgrey, lw=limlw)
+    ax1.plot_date(ts1, yellow_area_lb1, '-', c=darkgrey, lw=limlw)
+    ax1.plot_date(ts2, yellow_area_lb2, '-', c=darkgrey, lw=limlw)
+    ax1.fill_between(ts1, 360*np.ones(len(ts1)), 410*np.ones(len(ts1)), facecolor=red, alpha=0.25)
+    ax1.fill_between(ts2, 360*np.ones(len(ts2)), 410*np.ones(len(ts2)), facecolor=red, alpha=0.25)
+    ax1.fill_between(ts1, 340*np.ones(len(ts1)), 360*np.ones(len(ts1)), facecolor=yellow, alpha=0.25)
+    ax1.fill_between(ts2, 340*np.ones(len(ts2)), 360*np.ones(len(ts2)), facecolor=yellow, alpha=0.25)      
+    ax1.plot_date(ts1, Q_const_cap[0:len(ts1)], '-', c=red, label='Scenario 1')
     ax1.plot_date(ts2, Q_const_cap[len(ts1):], '-', c=red)
-    ax1.plot_date(ts1, Q_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Dynamic security margin')
+    ax1.plot_date(ts1, Q_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Scenario 2')
     ax1.plot_date(ts2, Q_dyn_cap[len(ts1):], '-', c=green, lw=1)    
     ax1.plot_date(ts1+ts2, 410*np.ones(len(ts1+ts2)), '--', c=red, lw=1)
+    handles, labels = ax1.get_legend_handles_labels()
+    hl = sorted(zip(handles, labels), key=operator.itemgetter(1))
+    handles2, labels2 = zip(*hl)
+
+    ax1.legend(handles2, labels2, loc=0, prop={'size':8})
 
 
-    ax2.plot_date(ts1, T_sup_const_cap[0:len(ts1)], '-', c=red, label='Constant security margin')
+    ax2.plot_date(ts1, T_sup_const_cap[0:len(ts1)], '-', c=red, label='Scenario 1')
     ax2.plot_date(ts2, T_sup_const_cap[len(ts1):], '-', c=red)
-    ax2.plot_date(ts1, T_sup_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Dynamic security margin')
+    ax2.plot_date(ts1, T_sup_dyn_cap[0:len(ts1)], '-', c=green, lw=1, label='Scenario 2')
     ax2.plot_date(ts2, T_sup_dyn_cap[len(ts1):], '-', c=green, lw=1)
     ax2.legend(loc=6, prop={'size':8})
    
     T_grnd = 6.4
     heat_loss_reduction = 100*(1 - (np.array(T_sup_dyn_cap) - T_grnd)/(np.array(T_sup_const_cap) - T_grnd))
+    heat_loss_reduction_half_model_unc = 100*(1 - (np.array(T_sup_dyn_cap_half_model_unc) - T_grnd)/(np.array(T_sup_const_cap) - T_grnd))
+
     redu_heat_loss1 = heat_loss_reduction[0:len(ts1)]
     redu_heat_loss2 = heat_loss_reduction[len(ts1):]
     ax3.plot_date(ts1, redu_heat_loss1, '-', c=blue, lw=1)
     ax3.plot_date(ts2, redu_heat_loss2, '-', c=blue, lw=1)
-    
     ax3.xaxis.set_major_formatter(DateFormatter('%b %d \n %Y') )
     ax1.tick_params(axis='y', which='major', labelsize=8)
     ax1.set_ylim(150,450)
@@ -852,6 +897,10 @@ def Q_T_heatloss_timeseries(): # figure 5
     
     mjloc = mpl.ticker.MultipleLocator(1)
     ax3.yaxis.set_major_locator(mjloc)
+    ax3.set_xlim(dt.datetime(2015,12,17,0), dt.datetime(2016,2,5,0))
     fig.tight_layout()
     
     fig.savefig('figures/first_articlefigs/Q_T_heatloss_timeseries.pdf')
+    
+    return heat_loss_reduction, heat_loss_reduction_half_model_unc
+    
