@@ -588,7 +588,7 @@ def production_model(): # figure 3
     y = fit_data['prod']
     res = mlin_regression(y, X, add_const=False)    
 
-    fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth), gridspec_kw={'height_ratios':[4,1]})
+    fig, [ax1, ax2] = plt.subplots(2, 1, sharex=True, figsize=(dcolwidth, 0.57*dcolwidth), gridspec_kw={'height_ratios':[4,1]})
 
     # load ensemble data
     ens_data1 = ens.load_ens_timeseries_as_df(ts_start=ts1[0], ts_end=ts1[-1],\
@@ -685,7 +685,7 @@ def production_model(): # figure 3
     
     print "Width of const blue bands (MW)", conf_int_spread_lower, conf_int_spread_higher
 
-    plt.savefig('figures/first_articlefigs/production_model.pdf', dpi=400) 
+    plt.savefig('Q:/Projekter/Ens Article 1/figures/production_model.pdf', dpi=400) 
 
    
     EO3_fc1 = sq.fetch_EO3_midnight_forecast(ts1[0], ts1[-1])
@@ -806,8 +806,9 @@ def hoerning_pump_model(): # figure 4
     ax2.fill_between([T1, 71.4, 80.9, 100], [295, 340, 360, 360], color='k', edgecolor='k', alpha=0.2, linewidth=1)
     ax1.plot([65+dT,95-dT], [410, 410], '--', c=red, lw=2)
     ax1.text(79,415, 'Maximum pump capacity', size=8)
+    #im = ax1.scatter(T_sup_const_cap, Q_const_cap, facecolors='none', cmap=plt.cm.BuPu)
     im = ax1.scatter(T_sup_const_cap, Q_const_cap, c=df['cons'], cmap=plt.cm.BuPu)
-    
+
     ax2.scatter(T_sup_dyn_cap, Q_dyn_cap, c=df['cons'], cmap=plt.cm.BuPu)
     ax2.plot([65+dT,95-dT], [410, 410], '--', c=red, lw=2)
     ax2.text(79,415, 'Maximum pump capacity', size=8)
@@ -854,7 +855,7 @@ def Q_T_heatloss_timeseries(): # figure 5
     T_sup_const_cap, T_sup_dyn_cap, Q_const_cap, Q_dyn_cap, model_conf_int, T_sup_dyn_cap_half_model_unc = hoerning_pump_model()
     plt.close('all')
     
-    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth), gridspec_kw={'height_ratios':[2,1,1]})
+    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.65*dcolwidth), gridspec_kw={'height_ratios':[3,1,1]})
     #fig, [ax1, ax2, ax3] = plt.subplots(3, 1, sharex=True, figsize=(dcolwidth, 0.55*dcolwidth))
     
     ts1 = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
@@ -914,7 +915,7 @@ def Q_T_heatloss_timeseries(): # figure 5
     ax3.set_xlim(dt.datetime(2015,12,17,0), dt.datetime(2016,2,5,0))
     fig.tight_layout()
     
-    fig.savefig('figures/first_articlefigs/Q_T_heatloss_timeseries.pdf')
+    fig.savefig('Q:/Projekter/Ens Article 1/figures/Q_T_heatloss_timeseries.pdf')
     
     return heat_loss_reduction, heat_loss_reduction_half_model_unc
     
