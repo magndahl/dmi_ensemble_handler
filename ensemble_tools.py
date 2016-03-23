@@ -39,7 +39,24 @@ def get_most_recent_filename(timestamp, data_delay=5):
                                                       DMI_update_interval))
                                                       
     return 'Aarhus_' + timestamp_str(data_file_timestamp)
+    
 
+def get_avail_at10_thedaybefore_filename(timestamp):
+    """ This function takes a timestamp for the endpoint of the 
+        hour of interest. It returns the filename for the forecast file
+        that was available at 10 am the previous day. This is
+        the 00 hour forecast with the current delay.
+        
+        """
+    
+    timestamp_startof_hour = timestamp + dt.timedelta(hours = -1)        
+    timestamp_day_before = timestamp_startof_hour + dt.timedelta(days = -1)
+    data_file_timestamp = dt.datetime(timestamp_day_before.year,
+                                      timestamp_day_before.month,
+                                      timestamp_day_before.day, 0)
+                                      
+    return 'Aarhus_' + timestamp_str(data_file_timestamp)
+    
 
 def gen_timeseries(field, timesteps, pointcode=71699, \
                    get_filename_func=get_most_recent_filename, \
@@ -48,8 +65,14 @@ def gen_timeseries(field, timesteps, pointcode=71699, \
     for ts, i in zip(timesteps, range(len(timesteps))):
         filename = get_filename_func(ts)      
         searchstring = gen_searchstring_pointcode(field, pointcode)
-        line_number = find_linenumber(searchstring, filename)
-        data_arr = load_data(line_number, filename)
+        try:
+            line_number = find_linenumber(searchstring, filename)
+            data_arr = load_data(line_number, filename)
+        except:
+            print "Warning: file %s not found, tries the previous forecast instead!"%filename
+            filename = get_previous_DMI_filename(filename)
+            line_number = find_linenumber(searchstring, filename)
+            data_arr = load_data(line_number, filename)
         time_series[i] = data_arr[row_number_by_timestamp(ts,data_arr), 1:]
         
     return time_series
@@ -65,6 +88,38 @@ def save_most_recent_timeseries(fieldname, ts_start, ts_end, pointcode=71699, \
     np.save(savepath+filename, ens_timeseries)
     print "Saved file: %s"%filename
     
+
+def save_avail_at10_timeseries(fieldname, ts_start, ts_end, pointcode=71699):
+    savepath='time_series/avail_at10_thedaybefore/'
+    filename = ''.join([fieldname, '_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end)])
+    
+    timesteps = gen_hourly_timesteps(ts_start, ts_end)
+    ens_timeseries = gen_timeseries(field_map[fieldname], timesteps, pointcode,
+                                    get_filename_func=get_avail_at10_thedaybefore_filename)                
+    np.save(savepath+filename, ens_timeseries)
+    print "Saved file: %s"%filename
+    
+
+def save_ens_mean_avail_at10_series(ts_start, ts_end, pointcode=71699):
+    savepath='time_series/avail_at10_thedaybefore/ens_means/'
+    suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])
+    for v in ['Tout', 'hum', 'vWind', 'sunRad']:
+        try:
+            ens_data = np.load('time_series/avail_at10_thedaybefore/' + v + suffix)
+        except:
+            print "Ensemble times series not found. Generating more: "
+            save_avail_at10_timeseries(v, ts_start, ts_end, pointcode)
+            ens_data = np.load('time_series/avail_at10_thedaybefore/' + v + suffix)
+        
+        if v=='Tout':
+            ens_data = Kelvin_to_Celcius(ens_data) ## convert the temperature to celcius
+        
+        hourly_mean = ens_data.mean(axis=1)
+        np.save(savepath + v + suffix, hourly_mean)
+        print "Saved files: " + savepath + v + suffix
+        
 
 def save_ens_mean_series(ts_start=dt.datetime(2015,12,16,1),\
                          ts_end=dt.datetime(2016,1,15,0), pointcode=71699, 
@@ -161,6 +216,10 @@ def timestamp_str(timestamp):
     return '%02i%02i%02i%02i' % (timestamp.year, timestamp.month, timestamp.day, timestamp.hour)
     
 
+def timestamp_from_str(ts_string):
+    return dt.datetime.strptime(ts_string, "%Y%m%d%H")
+    
+
 def find_linenumber(searchstring, filename, path=datapath):
     """ Takes a searchstring and a filename and returns the number of the 
         first line in which the searchstring appears. Returns None if no
@@ -208,6 +267,18 @@ def gen_searchstring_pointcode(field, pointcode=71699):
     return str(pointcode) + "   " + str(field)
     
     
+def get_previous_DMI_filename(filename):
+    """ This function takes the filename of one of the DMI ensemble
+        files and returns the one that was published 6 hours earlier.
+        
+        """
+        
+    ts_string = filename[-10:]
+    timestamp = timestamp_from_str(ts_string)
+    prev_timestep = timestamp + dt.timedelta(hours=-6)
+      
+    return filename[:-10] + timestamp_str(prev_timestep)
+
 
 def Kelvin_to_Celcius(array):
     return array - 273.15
@@ -222,4 +293,5 @@ def ensemble_std(array):
     
 def ensemble_abs_spread(array):
     return array.max(axis=1) - array.min(axis=1)
+    
     
