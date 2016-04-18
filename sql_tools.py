@@ -6,6 +6,7 @@ Created on Mon May 18 16:29:13 2015
 """
 
 import pymssql
+import datetime as dt
 import numpy as np
 import ensemble_tools as ens#import gen_hourly_timesteps, timestamp_str
 
@@ -73,8 +74,15 @@ def fetch_production(from_time, to_time):
     data = extractdata(conn, sql_query)
     timestamps, production = zip(*data)
     assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    prod_array = np.array(production, dtype=float)    
+    for ts in (2016032702, 2016032703):
+        if ts in timestamps:
+            print "Correcting error in production by transition to daylight savings on timestamp %s"%ts
+            index = timestamps.index(ts)
+            prod_array[index] = 2*prod_array[index]
     
-    return np.array(production, dtype=float)
+    return prod_array
+    
     
 def fetch_EO3_midnight_forecast(from_time, to_time):
     # load data from Energy Opticon forecast
