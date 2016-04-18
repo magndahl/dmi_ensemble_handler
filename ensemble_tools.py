@@ -63,6 +63,8 @@ def gen_timeseries(field, timesteps, pointcode=71699, \
                    get_filenam_func_kwargs=None):
     time_series = np.zeros((len(timesteps),25))
     for ts, i in zip(timesteps, range(len(timesteps))):
+        if in_dailightsavings_period(ts):
+            ts = ts + dt.timedelta(hours=-1) # this compensates for the fact that DMI always uses UTC+1 timestamps
         filename = get_filename_func(ts)      
         searchstring = gen_searchstring_pointcode(field, pointcode)
         try:
@@ -120,6 +122,20 @@ def save_ens_mean_avail_at10_series(ts_start, ts_end, pointcode=71699):
         np.save(savepath + v + suffix, hourly_mean)
         print "Saved files: " + savepath + v + suffix
         
+
+def load_ens_mean_avail_at10_series(var, ts_start, ts_end, pointcode=71699):
+    load_path = 'time_series/avail_at10_thedaybefore/ens_means/'
+    suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])                                                            
+    try:
+        ens_mean = np.load(load_path + var + suffix)
+    except:
+        print "Ensemble mean time series not found. Generating more: "
+        save_ens_mean_avail_at10_series(ts_start, ts_end, pointcode=pointcode)
+        ens_mean = np.load(load_path + var + suffix)
+    
+    return ens_mean
+    
 
 def save_ens_mean_series(ts_start=dt.datetime(2015,12,16,1),\
                          ts_end=dt.datetime(2016,1,15,0), pointcode=71699, 
@@ -294,4 +310,21 @@ def ensemble_std(array):
 def ensemble_abs_spread(array):
     return array.max(axis=1) - array.min(axis=1)
     
+    
+def in_dailightsavings_period(timestep):
+    """ Returns true if the time steps in the Danish daylight savings period,
+        Between 2014 and 2020. """
+        
+    dls_start_stop_dict = {2014:(dt.datetime(2014,3,30,2), dt.datetime(2014,10,26,3)),
+                           2015:(dt.datetime(2015,3,29,2), dt.datetime(2015,10,25,3)),
+                           2016:(dt.datetime(2016,3,27,2), dt.datetime(2016,10,30,3)),
+                           2017:(dt.datetime(2017,3,26,2), dt.datetime(2017,10,29,3)),
+                           2018:(dt.datetime(2018,3,25,2), dt.datetime(2018,10,28,3)),
+                           2019:(dt.datetime(2019,3,31,2), dt.datetime(2019,10,27,3)),
+                           2020:(dt.datetime(2020,3,29,2), dt.datetime(2020,10,25,3))}
+    for year in dls_start_stop_dict.keys():        
+        if dls_start_stop_dict[year][0] < timestep <= dls_start_stop_dict[year][1]:
+            return True
+    
+    return False
     
