@@ -106,6 +106,30 @@ def fetch_EO3_midnight_forecast(from_time, to_time):
     Opt_forecast = zip(*data_unique_forecast)[1]
     
     return np.array(Opt_forecast, dtype=float)
+
+
+def fetch_EO3_10oclock_forecast(from_time, to_time):
+    # load data from Energy Opticon forecast
+    conn = connect()
+    sql_query = """
+    USE [EDW_Stage]
+    SELECT [TimeStamp]
+          ,[Value]
+          ,[FileName]
+          ,[DateCreated]
+      FROM [dongopticon].[Varmeprognose]
+      WHERE Filename LIKE '%s' AND TimeStamp BETWEEN '%s' AND '%s'
+      ORDER BY TimeStamp"""% ('%10-00.csv', str(from_time), str(to_time))
+    
+    data = extractdata(conn, sql_query)
+
+    # return only the forecast for the following day. The -24-1 construction is 
+    # made because the 00 hour is the last hour of the day
+    data_unique_forecast = [dp for dp in data if (dp[0]+dt.timedelta(hours=-24-1)).date()==dp[-1].date()]
+    Opt_timesteps_original = list(zip(*data_unique_forecast)[0])
+    Opt_forecast = zip(*data_unique_forecast)[1]
+    
+    return np.array(Opt_forecast, dtype=float)    
     
     
 def fetch_price(from_time, to_time, price_name='Timenspris'):
