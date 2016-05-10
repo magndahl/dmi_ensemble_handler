@@ -17,9 +17,10 @@ from sklearn import linear_model, cross_validation
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from model_selection import mlin_regression, summary_to_file, linear_map, rmse, mae, mape
-
+from model_selection import gen_all_combinations, rmse, mae, mape
 import pandas as pd
+
+plt.close('all')
 
 def h_hoursbefore(timestamp, h):
     return timestamp + dt.timedelta(hours=-h)
@@ -46,66 +47,39 @@ def gen_fit_df(ts_start, ts_end, varnames, timeshifts, pointcode=71699):
     
     
     return df        
-        
-        
-all_data = gen_fit_df(dt.datetime(2016,1,26,1), dt.datetime(2016,4,1,0), ['Tout', 'vWind', 'hum', 'sunRad'], [48,168])
+
+reload_data = False
+if reload_data:        
+    timelags = [48,168]
+    all_data = gen_fit_df(dt.datetime(2016,1,26,1), dt.datetime(2016,4,1,0), ['Tout', 'vWind', 'hum', 'sunRad'], timelags)
 y = all_data['prod']
 
 #%%
 ts = ens.gen_hourly_timesteps(dt.datetime(2016,1,26,1), dt.datetime(2016,4,1,0))
-X = all_data[['prod48hbefore', 'Tout48hdiff', 'prod168hbefore', 'Tout168hdiff', 'vWind168hdiff']]
-est = mlin_regression(y, X, add_const=False)
+X = all_data.ix[:, all_data.columns !='prod']
 
-fv = est.fittedvalues
-plt.close('all')
-sns.jointplot(fv, y)
-plt.figure()
-plt.plot_date(ts, y, 'b-')
-plt.plot_date(ts, fv, 'r-')
-
-err = y-fv
-print rmse(err), mae(err), mape(err,y)
-err48h_ago = np.roll(err, 48)
-all_data['err48h_ago'] = err48h_ago
-
-X = all_data[['prod48hbefore', 'Tout48hdiff', 'prod168hbefore', 'Tout168hdiff', 'vWind168hdiff', 'err48h_ago']]
-est2 = mlin_regression(y, X, add_const=False)
-fv2 = est2.fittedvalues
-err2 = y - est2.fittedvalues
-
-print rmse(err2), mae(err2), mape(err2,y)
-
-sns.jointplot(fv2, y)
-plt.figure()
-plt.plot_date(ts, y, 'b-')
-plt.plot_date(ts, fv2, 'r-')
 
 #%%
-all_Z_data = pd.DataFrame()
-for c in all_data.columns:
-    all_Z_data[c] = (all_data[c]-all_data[c].mean())/all_data[c].std()
-X_data = all_Z_data.ix[:, all_Z_data.columns != 'prod']
-yz = all_Z_data['prod']
-lr = linear_model.LinearRegression()
+lr = linear_model.LinearRegression(fit_intercept=False)
 
 
-predicted = cross_val_predict(lr, X_data, yz, cv=25)
+predicted = cross_val_predict(lr, X, y, cv=25)
 plt.figure()
-plt.plot(yz)
+plt.plot(y)
 plt.plot(predicted, 'r')
-sns.jointplot(pd.Series(predicted), yz)
-score = cross_val_score(lr, X_data, yz, cv=25)
+sns.jointplot(pd.Series(predicted), y)
+score = cross_val_score(lr, X, y, cv=25, scoring='mean_absolute_error' )
 
-cv = cross_validation.KFold(len(X_data), n_folds=10, shuffle=False, random_state=None)
-cv_estimates = []
-for train_cv, test_cv in cv:
-    cv_estimates.append(mlin_regression(yz[train_cv], X_data.iloc[train_cv], add_const=True))
+lr.fit(X,y)
+
+var_combs = gen_all_combinations(X.columns)
+maes = np.zeros(len(var_combs))
+rmses = np.zeros(len(var_combs))
+for v, i in zip(var_combs, range(len(var_combs))):
+    predicted = cross_val_predict(lr, all_data[v], y, cv=4)
+    maes[i] = mae(predicted-y)
+    rmses[i] = rmse(predicted-y)
     
-    
-with open('cv_res.txt', 'w') as f:
-    for e in cv_estimates:
-        summary_to_file(e, f)
-        
 
 #%% EO3 benchmark
 EO3prog = sq.fetch_EO3_10oclock_forecast(ts[0], ts[-1])
