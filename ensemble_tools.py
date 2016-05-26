@@ -123,6 +123,22 @@ def save_ens_mean_avail_at10_series(ts_start, ts_end, pointcode=71699):
         print "Saved files: " + savepath + v + suffix
         
 
+def load_ens_avail_at10_series(ts_start, ts_end, varname, pointcode=71699):
+    suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
+                        '_to_', timestamp_str(ts_end), '.npy'])
+    try:
+        ens_data = np.load('time_series/avail_at10_thedaybefore/' + varname + suffix)
+    except:
+        print "Ensemble times series not found. Generating more: "
+        save_avail_at10_timeseries(varname, ts_start, ts_end, pointcode)
+        ens_data = np.load('time_series/avail_at10_thedaybefore/' + varname + suffix)
+    
+    if varname=='Tout':
+        ens_data = Kelvin_to_Celcius(ens_data) ## convert the temperature to celcius
+        
+    return ens_data
+
+
 def load_ens_mean_avail_at10_series(var, ts_start, ts_end, pointcode=71699):
     load_path = 'time_series/avail_at10_thedaybefore/ens_means/'
     suffix = ''.join(['_geo', str(pointcode), '_', timestamp_str(ts_start), \
