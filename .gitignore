@@ -66,3 +66,6 @@ combined_conf_int.npz
 combined_conf_int.npz
 combined_conf_int.npz
 combined_conf_int.npz
+*.pkl
+2014-2015_for_Ahmad.csv
+data_extract_for_Ahmad.py
