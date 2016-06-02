@@ -36,7 +36,7 @@ most_recent_avail_prod = sq.fetch_production(h_hoursbefore(ts[0], 24),\
                                                           h_hoursbefore(ts[-1], 24))
 
 for i, t, p48 in zip(range(len(most_recent_avail_prod)), ts, X['prod48hbefore']):
-    if t.hour >= 8 or t.hour == 0:
+    if t.hour > 8 or t.hour == 0:
         most_recent_avail_prod[i] = p48
 
         
@@ -54,8 +54,8 @@ svr_rmses = {}
 svr_poly_rmses = {}
 #Cs = np.linspace(14,18,10)
 #gams = np.linspace(0.003, 0.004, 10)
-Cs = np.linspace(27,40, 10)
-gams = [0.002666]#np.linspace(0.002, 0.005, 10)
+Cs = np.linspace(35,55, 10)
+gams = np.linspace(0.002, 0.005, 10)
 # SVR with RBF kernel
 for C in Cs:
     for gamma in gams:
@@ -65,7 +65,7 @@ for C in Cs:
         svr_rmses[(C,gamma)] = rmse(y_scaler.inverse_transform(y_rbf)-y)
 
 #%%
-svr_rbf = SVR(kernel='rbf', C=30, gamma=0.00266)
+svr_rbf = SVR(kernel='rbf', C=35, gamma=0.00266)
 y_rbf = cross_val_predict(svr_rbf, X_scaled, y_scaled, cv=10)
 svr_rmse_lone = rmse(y_scaler.inverse_transform(y_rbf)-y)
 svr_mae_lone = mae(y_scaler.inverse_transform(y_rbf)-y)
@@ -131,7 +131,7 @@ most_recent_avail_prod_test = sq.fetch_production(h_hoursbefore(ts_test[0], 24),
                                                           h_hoursbefore(ts_test[-1], 24))
 
 for i, t, p48 in zip(range(len(most_recent_avail_prod_test)), ts_test, X_test['prod48hbefore']):
-    if t.hour >= 8 or t.hour == 0:
+    if t.hour > 8 or t.hour == 0:
         most_recent_avail_prod[i] = p48
 
         
