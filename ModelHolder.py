@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import datetime as dt
 from sklearn.preprocessing import StandardScaler
 import sql_tools as sq
@@ -33,8 +34,8 @@ class ModelHolder(object):
         self.fit_X_scaled = None
         self.y_scaler = None
         self.fit_y_scaled = None
-        self.predict_X = None
-        self.predict_y = None
+        self.predict_X_dict = None
+        self.predict_y_dict = None
 
 
     def gen_fit_data(self, *kwargs):
@@ -60,6 +61,16 @@ class ModelHolder(object):
         self.fit_y_scaled = self.y_scaler.transform(self.fit_y.reshape(-1,1)).reshape(-1,)
 
 
+    def gen_predict_data(self, *kwargs):
+        """ This method calls the gen_fit_data_func function
+            and sets the predict_X_dict field to the result.
+
+            """
+
+        self.predict_X_dict = self.gen_predict_data_func(*kwargs)
+
+
+
     def fit(self):
         """ This method fits the model to scaled data if
             possible. If fit data has not been scaled,
@@ -74,8 +85,22 @@ class ModelHolder(object):
             self.model.fit(self.fit_X, self.fit_y)
 
 
+    def predict(self):
+        if self.X_scaler!=None:
+            self.predict_y_dict = {}
+            for k in self.predict_X_dict.keys():
+                self.predict_y_dict[k] = self.y_scaler.inverse_transform(\
+                                        self.model.predict(self.X_scaler.transform(\
+                                                       self.predict_X_dict[k])))
+        else:
+            self.predict_y_dict = {}
+            for k in self.predict_X_dict.keys():
+                self.predict_y_dict[k] = self.model.predict(self.predict_X_dict[k])
 
-def gen_SVR_fit_data(ts_start, ts_end):
+
+
+
+def gen_SVR_ens_mean_X(ts_start, ts_end):
     """ This function can generate fit data for an SVR
         model based on 20 variables.
 
@@ -90,17 +115,62 @@ def gen_SVR_fit_data(ts_start, ts_end):
         X[v] = ens.load_ens_mean_avail_at10_series(v, ts_start, ts_end)
 
     # include the most recent avail prod at 9.45, that is the one from 8o'clock
-    most_recent_avail_prod = sq.fetch_production(h_hoursbefore(ts_start, 24),\
-                                                          h_hoursbefore(ts_end, 24))
-    ts = ens.gen_hourly_timesteps(ts_start, ts_end)
-    for i, t, p48 in zip(range(len(most_recent_avail_prod)), ts, X['prod48hbefore']):
-        if t.hour > 8 or t.hour == 0:
-            most_recent_avail_prod[i] = p48
+    last_avail_hour = 8 # this must be changed if the horizon is changed
+    most_recent_avail_prod = np.hstack([sq.fetch_production(h_hoursbefore(ts_start, 24),\
+                                                          h_hoursbefore(ts_start+\
+                                                          dt.timedelta(hours=last_avail_hour-1), 24)),\
+                                       sq.fetch_production(h_hoursbefore(ts_start+\
+                                                          dt.timedelta(hours=last_avail_hour), 48),\
+                                                          h_hoursbefore(ts_end, 48))])
 
     X['prod24or48hbefore'] = most_recent_avail_prod
+
+    return X
+
+
+def gen_SVR_fit_data(ts_start, ts_end):
+    X = gen_SVR_ens_mean_X(ts_start, ts_end)
     y = sq.fetch_production(ts_start, ts_end)
 
     return X, y
+
+
+def gen_SVR_predict_data(ts_start, ts_end):
+    """ timeshifts must be integer number of hours. Posetive values only,
+        dataframe contains columns with the variables minus their value
+        'timeshift' hours before. """
+
+    varnames = ['Tout', 'vWind', 'hum', 'sunRad']
+    timeshifts = [48, 60, 168]
+
+    df = pd.DataFrame()
+    X_dict = {'ens_mean':gen_SVR_ens_mean_X(ts_start, ts_end)}
+    df_s = [pd.DataFrame() for i in range(25)]
+
+    for timeshift in timeshifts:
+
+        prod_before = sq.fetch_production(h_hoursbefore(ts_start, timeshift),\
+                                                          h_hoursbefore(ts_end, timeshift))
+        for df in df_s:
+            df['prod%ihbefore'%timeshift] = prod_before
+
+        for v in varnames:
+            ens_data = ens.load_ens_avail_at10_series(ts_start, ts_end, v, pointcode=71699)
+            ens_data_before = ens.load_ens_avail_at10_series(h_hoursbefore(ts_start, timeshift),\
+                                                        h_hoursbefore(ts_end, timeshift), v, pointcode=71699)
+            diff = ens_data - ens_data_before
+            for i in range(ens_data.shape[1]):
+                df_s[i]['%s%ihdiff%i'%(v,timeshift, i)] = diff[:,i]
+    for v in varnames:
+        ens_data = ens.load_ens_avail_at10_series(ts_start, ts_end, v, pointcode=71699)
+        for i in range(ens_data.shape[1]):
+            df_s[i]['%s%i'%(v, i)] = ens_data[:,i]
+
+    for df, i in zip(df_s, range(len(df_s))):
+        df['prod24or48hbefore'] = X_dict['ens_mean']['prod24or48hbefore']
+        X_dict['ens_%i' % i] = df
+
+    return X_dict
 
 
 def gen_lagged_w_ens_mean_diff_df(ts_start, ts_end, varnames, timeshifts, pointcode=71699):
