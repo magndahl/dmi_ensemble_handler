@@ -116,10 +116,10 @@ def gen_SVR_ens_mean_X(ts_start, ts_end):
 
     # include the most recent avail prod at 9.45, that is the one from 8o'clock
     last_avail_hour = 8 # this must be changed if the horizon is changed
-    most_recent_avail_prod = np.hstack([sq.fetch_production(h_hoursbefore(ts_start, 24),\
+    most_recent_avail_prod = np.hstack([sq.load_local_production(h_hoursbefore(ts_start, 24),\
                                                           h_hoursbefore(ts_start+\
                                                           dt.timedelta(hours=last_avail_hour-1), 24)),\
-                                       sq.fetch_production(h_hoursbefore(ts_start+\
+                                       sq.load_local_production(h_hoursbefore(ts_start+\
                                                           dt.timedelta(hours=last_avail_hour), 48),\
                                                           h_hoursbefore(ts_end, 48))])
 
@@ -130,7 +130,7 @@ def gen_SVR_ens_mean_X(ts_start, ts_end):
 
 def gen_SVR_fit_data(ts_start, ts_end):
     X = gen_SVR_ens_mean_X(ts_start, ts_end)
-    y = sq.fetch_production(ts_start, ts_end)
+    y = sq.load_local_production(ts_start, ts_end)
 
     return X, y
 
@@ -149,7 +149,7 @@ def gen_SVR_predict_data(ts_start, ts_end):
 
     for timeshift in timeshifts:
 
-        prod_before = sq.fetch_production(h_hoursbefore(ts_start, timeshift),\
+        prod_before = sq.load_local_production(h_hoursbefore(ts_start, timeshift),\
                                                           h_hoursbefore(ts_end, timeshift))
         for df in df_s:
             df['prod%ihbefore'%timeshift] = prod_before
@@ -186,7 +186,7 @@ def gen_lagged_w_ens_mean_diff_df(ts_start, ts_end, varnames, timeshifts, pointc
     df = pd.DataFrame()
 
     for timeshift in timeshifts:
-        df['prod%ihbefore'%timeshift] = sq.fetch_production(h_hoursbefore(ts_start, timeshift),\
+        df['prod%ihbefore'%timeshift] = sq.load_local_production(h_hoursbefore(ts_start, timeshift),\
                                                           h_hoursbefore(ts_end, timeshift))
         for v in varnames:
             ens_mean = ens.load_ens_mean_avail_at10_series(v, ts_start, ts_end, pointcode=71699)
