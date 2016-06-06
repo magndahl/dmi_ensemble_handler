@@ -8,6 +8,7 @@ Created on Mon May 18 16:29:13 2015
 import pymssql
 import datetime as dt
 import numpy as np
+import pandas as pd
 import ensemble_tools as ens#import gen_hourly_timesteps, timestamp_str
 
 login_info = np.load('/home/magnus/dmi_ensemble_handler/settings/forretningslag_login.npz')
@@ -82,6 +83,13 @@ def fetch_production(from_time, to_time):
             prod_array[index] = 2*prod_array[index]
 
     return prod_array
+
+
+def load_local_production(from_time, to_time):
+    path = '/home/magnus/local_production/'
+    full_prod = pd.read_pickle(path + 'production_ts.pkl')
+
+    return np.array(full_prod[from_time:to_time])
 
 
 def fetch_EO3_midnight_forecast(from_time, to_time):
