@@ -10,6 +10,8 @@ matplotlib.use("Agg") # this is needed to rund under cron
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredText
 import plotly.plotly as ply
+import plotly.tools as tls
+import plotly.graph_objs as go
 from sklearn.svm import SVR
 from error_tools import rmse, mae, mape
 import ModelHolder as mh
@@ -30,13 +32,14 @@ def main(argv):
 
     print "Today is: %s" % today
 
-    fig_tomorrow = plot_tomorrow_forecast(today=today)
-    ply.plot_mpl(fig_tomorrow, filename="SVR forecast for tomorrow", auto_open=False)
 
-    fig_yesterday = plot_yesterday_forcast(today=today)
-    ply.plot_mpl(fig_yesterday, filename="Yesterday's SVR forecast", auto_open=False)
+    plyfig_yest = plot_yesterday_forcast(today=today)
+    ply.plot(plyfig_yest, filename="Yesterday's SVR forecast", auto_open=False)
 
-    return
+    plyfig_tom = plot_tomorrow_forecast(today=today)
+    ply.plot(plyfig_tom, filename="SVR forecast for tomorrow", auto_open=False)
+
+    return plyfig_yest
 
 
 def plot_tomorrow_forecast(today):
@@ -45,12 +48,19 @@ def plot_tomorrow_forecast(today):
     mean_forecast = fc_dict['ens_mean']
     ens_forecast = np.array([fc_dict['ens_%i'%i] for i in range(25)]).transpose()
     ts = get_tomorrow_timesteps(today)
+    plt.plot_date(ts, ens_forecast, '-', color='0.25', lw=0.3)
     plt.plot_date(ts, mean_forecast, 'b-', lw=2, label='Forecast')
-    plt.plot_date(ts, ens_forecast, '-', lw=0.3)
     plt.ylabel("Production [MW]")
     plt.title("Tomorrow: " + str(today+dt.timedelta(days=1)))
 
-    return fig
+    plotly_fig = tls.mpl_to_plotly(fig)
+    plotly_fig['layout']['showlegend'] = True
+    plotly_fig['layout']['legend'] = dict(x=0.75, y=0.05)
+    for d in plotly_fig.data:
+        if d['name'][0:5]=='_line':
+            d['showlegend'] = False
+
+    return plotly_fig
 
 
 def plot_yesterday_forcast(today):
@@ -63,7 +73,7 @@ def plot_yesterday_forcast(today):
 
     prod = sq.load_local_production(ts[0], ts[-1])
     plt.plot_date(ts, prod, 'k-', lw=2, label='Realized production')
-    plt.plot_date(ts, ens_forecast, '-', lw=0.3)
+    plt.plot_date(ts, ens_forecast, '-', color='0.25', lw=0.3)
     plt.plot_date(ts, mean_forecast, 'b-', lw=2, label='Forecast')
     plt.ylabel("Production [MW]")
     plt.title("Yesterday: " + str(today+dt.timedelta(days=-1)))
@@ -73,7 +83,14 @@ def plot_yesterday_forcast(today):
                 % (rmse(err), mae(err), 100*mape(err, prod))
     plt.annotate(err_string, xy=(0.80, 0.80), xycoords='axes fraction')
 
-    return fig
+    plotly_fig = tls.mpl_to_plotly(fig)
+    plotly_fig['layout']['showlegend'] = True
+    plotly_fig['layout']['legend'] = dict(x=0.75, y=0.05)
+    for d in plotly_fig.data:
+        if d['name'][0:5]=='_line':
+            d['showlegend'] = False
+
+    return plotly_fig
 
 
 
