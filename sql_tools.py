@@ -128,7 +128,7 @@ def fetch_EO3_9oclock_forecast(from_time, to_time):
           ,[DateCreated]
       FROM [dongopticon].[Varmeprognose]
       WHERE Filename LIKE '%s' AND TimeStamp BETWEEN '%s' AND '%s'
-      ORDER BY TimeStamp"""% ('%09-00.csv', str(from_time), str(to_time))
+      ORDER BY TimeStamp"""% ('%09-%.csv', str(from_time), str(to_time))
 
     data = extractdata(conn, sql_query)
 
