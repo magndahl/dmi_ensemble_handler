@@ -69,3 +69,7 @@ combined_conf_int.npz
 *.pkl
 2014-2015_for_Ahmad.csv
 data_extract_for_Ahmad.py
+weather2015.csv
+udtraektilMartin.py
+rundhoejmodel.py
+holmemodel.py
