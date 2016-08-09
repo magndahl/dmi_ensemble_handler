@@ -20,6 +20,8 @@ BBSyd_pi_dict = {'Tout':"'2.123.121.60.HA.101'",
                  'sunRad':"'2.123.137.01.HA.101'",
                  'hum':"'2.123.148.60.HA.101'",
                  'Tgrnd100':"'2.123.124.10.HA.101'"}
+                 
+consumption_place_key_dict = {'rundhoej':26, 'holme':42, 'hoerning':21}
 
 def connect():
     conn = pymssql.connect(server=srv, user=usr, password=psw)
@@ -82,7 +84,24 @@ def fetch_production(from_time, to_time):
             prod_array[index] = 2*prod_array[index]
     
     return prod_array
-    
+
+
+def fetch_consumption(Forbrugssted_Key, from_time, to_time):
+    conn = connect()
+    sql_query = """ USE [DM_VT]
+                    SELECT
+                      [Tid_Key]
+                      ,[ForbrugMWh]
+                      FROM [DM_VT].[dbo].[vForbrug_Doegn]
+                      WHERE Forbrugssted_Key = %i AND Tid_Key BETWEEN '%s' AND  '%s'
+                      ORDER BY Tid_Key""" % (Forbrugssted_Key, ens.timestamp_str(from_time), ens.timestamp_str(to_time))
+    data = extractdata(conn, sql_query)                 
+    timestamps, consumption = zip(*data)
+    assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    cons_array = np.array(consumption, dtype=float) 
+
+    return cons_array
+                 
     
 def fetch_EO3_midnight_forecast(from_time, to_time):
     # load data from Energy Opticon forecast
