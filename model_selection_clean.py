@@ -15,7 +15,7 @@ from model_selection import linear_map, mlin_regression, gen_all_combinations, s
 #%%
 fit_ts = ens.gen_hourly_timesteps(dt.datetime(2015,12,17,1), dt.datetime(2016,1,15,0))
 vali_ts = ens.gen_hourly_timesteps(dt.datetime(2016,1,20,1), dt.datetime(2016,2,5,0))
-test_ts = ens.gen_hourly_timesteps(dt.datetime(2016,2,5,1), dt.datetime(2016,4,1,0))
+test_ts = ens.gen_hourly_timesteps(dt.datetime(2016,2,5,1), dt.datetime(2016,3,1,0))
 
 all_ts = fit_ts + vali_ts + test_ts
 
