@@ -8,8 +8,6 @@ Created on Mon Jun 13 16:07:49 2016
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-import statsmodels.api as sm
-from statsmodels.graphics.gofplots import qqplot
 from scipy import stats, integrate
 from scipy.interpolate import interp1d
 from scipy.optimize import fmin
@@ -18,7 +16,6 @@ from sklearn import svm
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import datetime as dt
-import gurobipy as gb
 import seaborn as sns
 import ensemble_tools as ens
 import sql_tools as sq
@@ -45,6 +42,28 @@ uni_degree = u'\u00B0'
 uni_squared = u'\u00B2'
 
 
+
+def gen_synthetic_cons(ens_preds, cons_pred, model_std):
+    rand_ens_pred = pd.Series(index=ens_preds.index)
+    rand_columns = np.random.randint(25,size=len(ens_preds))
+    for i, c in zip(ens_preds.index, rand_columns):
+        rand_ens_pred[i] = ens_preds.ix[i,c]
+        
+    weather_error = cons_pred - rand_ens_pred
+    model_error = pd.Series(model_std*np.random.randn(len(cons_pred)), index=cons_pred.index)
+    
+    synth_cons = cons_pred - (weather_error + model_error)
+    
+    return synth_cons
+    
+    
+def sim_with_synth_cons(model_std, ens_preds, cons_pred, sim_input):
+
+    
+    return synth_resid, synth_resid, sc2_errormargin_synth
+    
+#%%
+    
 def chi2_from_sig_m(sig_m, err_t, sig_w):
     sig_t = np.sqrt(sig_m**2 + sig_w**2)
     mean_err_t = np.mean(err_t)
@@ -80,9 +99,16 @@ def percent_above_forecasterrormargin(error_margin, forecast, actual):
     
 def model_based_uncertainty_alaGorm(ens_preds, mean_forecast, actual, no_sigma, quantile):
     weather_uncert = no_sigma*ens_preds.std(axis=1)
-    
-    model_uncert = fmin(lambda x: np.abs((1-quantile) - percent_above_forecasterrormargin(weather_uncert+x, mean_forecast, actual)), weather_uncert.mean())
+    max_x = np.max(np.abs(mean_forecast-actual))
+    xs = np.linspace(0, max_x, 1000)
+    erf = np.array([np.abs((1.-quantile) - percent_above_forecasterrormargin(weather_uncert+x, mean_forecast, actual)) for x in xs])
+    model_uncert = xs[np.argmin(erf)]
+    #fmin(lambda x: np.abs((1.-quantile) - percent_above_forecasterrormargin(weather_uncert+x, mean_forecast, actual)), weather_uncert.mean(), ftol=0.00001)
     print "qua:", quantile
+    
+    plt.figure()
+    plt.plot(np.linspace(0, max_x, 1000), erf,'-')
+    plt.title('erf')
     return model_uncert
     
     
@@ -343,6 +369,46 @@ def load_cons_model_ens_dfs(df):
         
     return all_data
 
+def fig_error_margins(sc2_errormargin, sc3_errormargin, sim_input, sc3_model_uncert, station, no_sigma):
+    plt.figure()
+    plt.plot_date(sim_input.index, sc2_errormargin, 'r-', label='Scenario 2')
+    plt.plot_date(sim_input.index, sc3_errormargin, 'g-', label='Scenario 3')
+    plt.plot_date(sim_input.index, sim_input['cons']-sim_input['cons_pred'], 'y-', label='Forecast_error')
+    plt.title("Errormargin on forecast: " + station + ', ' + str(no_sigma) + r'$\sigma$' + ' Model uncert: ' +str(sc3_model_uncert))
+    plt.ylabel("[MW]")
+    plt.legend()
+    
+    return
+    
+def fig_heat_loss(sim_input, sim_results_sc2, sim_results_sc3, station, no_sigma, figfilename=None, figpath=figpath, save=True):
+    fig, axes = plt.subplots(2,2, figsize=(30,7.5), sharex=True)
+    axes[0,0].plot_date(sim_input.index, sim_input['T_sup'] - sim_results_sc2['T_sup'], 'k-', label='Absolute reduction in supply temperature')
+    axes[0,0].set_title('Scenario 1 vs Scenario 2')
+    axes[0,0].annotate('mean: %2.3f' % (np.mean(sim_input['T_sup'] - sim_results_sc2['T_sup'])), xy=(0.05, 0.1), xycoords='axes fraction')
+    axes[0,0].set_ylabel(u'Differens in supply temperature 1-2 [%sC]'%uni_degree, size=8)
+    axes[1,0].plot_date(sim_input.index, 100*(1-(sim_results_sc2['T_sup']-T_grnd)/(sim_input['T_sup'] - T_grnd)), '-')
+    axes[1,0].set_ylabel('Heat loss\nreduction [%]', size=8)    
+    axes[1,0].set_title('Scenario 1 --> Scenario 2')
+    axes[1,0].annotate('mean: %2.3f' % (np.mean(100*(1-(sim_results_sc2['T_sup']-T_grnd)/(sim_input['T_sup'] - T_grnd)))), xy=(0.05, 0.1), xycoords='axes fraction')
+
+    axes[0,1].plot_date(sim_input.index, sim_results_sc2['T_sup'] - sim_results_sc3['T_sup'], 'k-', label='Absolute reduction in supply temperature')
+    axes[0,1].set_title('Scenario 2 vs Scenario 3')
+    axes[0,1].annotate('mean: %2.3f' % (np.mean(sim_results_sc2['T_sup'] - sim_results_sc3['T_sup'])), xy=(0.05, 0.1), xycoords='axes fraction')
+
+    axes[0,1].set_ylabel(u'Differens in supply temperature 2-3 [%sC]'%uni_degree, size=8)    
+    axes[1,1].plot_date(sim_input.index, 100*(1-(sim_results_sc3['T_sup']-T_grnd)/(sim_results_sc2['T_sup'] - T_grnd)), '-')
+    axes[1,1].set_ylabel('Heat loss\nreduction [%]', size=8) 
+    axes[1,1].set_title('Scenario 2 --> Scenario 3')
+    axes[1,1].annotate('mean: %2.3f' % (np.mean(100*(1-(sim_results_sc3['T_sup']-T_grnd)/(sim_results_sc2['T_sup'] - T_grnd)))), xy=(0.05, 0.1), xycoords='axes fraction')
+
+    
+    fig.suptitle(station + ', ' + str(no_sigma) + r'$\sigma$')
+    if figfilename==None:
+        figfilename = 'heat_loss_%2.2f'%(no_sigma) + 'sigma_' + station + '.pdf'
+    if save:
+        fig.savefig(figpath + figfilename)
+    
+    return
 
 #%%
 def main(argv):
@@ -475,10 +541,48 @@ def main(argv):
     use_sc35 = False
     if use_sc35:
         sc3_errormargin = sc35_errormargin
-        
+     
     sim_results_sc2 = simulate_operation(sim_input, sc2_errormargin, TminofTout_fun, station)
-    sim_results_sc3 = simulate_operation(sim_input, sc3_errormargin, TminofTout_fun, station)
+    sim_results_sc3 = simulate_operation(sim_input, sc3_errormargin, TminofTout_fun, station)    
+    
+    #%% synthetic consumption, controlled variable model uncertainty
+    
+    model_stds = [0.5*sim_input['cons'].std(), 0.1*sim_input['cons'].std(), 0.05*sim_input['cons'].std()]# sim_input['cons'].std()*np.linspace(0,1,10)
+    sc2_synth_results = []
+    sc3_synth_results = []
+    model_uncerts = []
+    for model_std in model_stds:
+        synth_cons = gen_synthetic_cons(ens_preds, sim_input['cons_pred'], model_std)
+        sim_input_synth = sim_input.copy(deep=True)
+        sim_input_synth['cons'] = synth_cons
+        synth_resid = sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'] - sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons']
+        sc2_errormargin_synth = pd.Series(no_sigma*np.ones(len(sim_input_synth))*synth_resid.std(), index=sim_input_synth.index)
+        quantile_sc2_synth = 1. - percent_above_forecasterrormargin(\
+                        sc2_errormargin_synth.loc[nonfit_ts_start:nonfit_ts_end], \
+                        sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
+                        sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end,'cons'])
+        print "Sc2 q: ", quantile_sc2_synth
+        sc3_model_uncert_synth = model_based_uncertainty_alaGorm(\
+                                ens_preds.loc[nonfit_ts_start:nonfit_ts_end], \
+                                sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
+                                sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons'], no_sigma, quantile_sc2_synth)
+        model_uncerts.append(sc3_model_uncert_synth)
+        sc3_errormargin_synth = pd.Series(no_sigma*ens_preds.std(axis=1) + sc3_model_uncert_synth,  index=sim_input_synth.index)
+    
+        sim_results_sc2_synth = simulate_operation(sim_input_synth, sc2_errormargin_synth, TminofTout_fun, station)
+        sim_results_sc3_synth = simulate_operation(sim_input_synth, sc3_errormargin_synth, TminofTout_fun, station)
+        sc2_synth_results.append(sim_results_sc2_synth)
+        sc3_synth_results.append(sim_results_sc3_synth)
 
+    mean_Tsupdiff = []
+    mean_heatlossreduced = []
+    for sc2_res, sc3_res in zip(sc2_synth_results, sc3_synth_results):
+        mean_Tsupdiff.append(np.mean(sc2_res['T_sup'] - sc3_res['T_sup']))
+        mean_heatlossreduced.append(np.mean(100*(1-(sc3_res['T_sup']-T_grnd)/(sc2_res['T_sup'] - T_grnd))))
+        
+    plt.figure()
+    plt.plot(model_uncerts, mean_Tsupdiff, 'k.')
+    plt.title('Mean temp reduction vs model uncert.')
         
     print "Perc above errormargin, sc2: ", percent_above_forecasterrormargin(\
                     sc2_errormargin.loc[nonfit_ts_start:nonfit_ts_end], \
@@ -487,27 +591,31 @@ def main(argv):
     print "Perc above errormargin, sc3: ", percent_above_forecasterrormargin(sc3_errormargin.loc[nonfit_ts_start:nonfit_ts_end], \
                     sim_input.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
                     sim_input.loc[nonfit_ts_start:nonfit_ts_end,'cons'])
-    print "Perc above errormargin, sc3.5: ", percent_above_forecasterrormargin(sc35_errormargin.loc[nonfit_ts_start:nonfit_ts_end], \
-                    sim_input.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
-                    sim_input.loc[nonfit_ts_start:nonfit_ts_end,'cons'])
     print "mean errormargin, sc2: ", sc2_errormargin.mean()
     print "mean errormargin, sc3: ", sc3_errormargin.mean()
     print "rms errormargin, sc2: ", rmse(sc2_errormargin)
     print "rms errormargin, sc3: ", rmse(sc3_errormargin)
     
-    
-    sns.jointplot(np.abs(nonfit_errors), ens_preds.loc[nonfit_ts_start:nonfit_ts_end].std(axis=1))
-    plt.savefig(figpath + station + 'err_ens_spread.pdf')
+    print "Synth Perc above errormargin, sc2: ", percent_above_forecasterrormargin(\
+                    sc2_errormargin_synth.loc[nonfit_ts_start:nonfit_ts_end], \
+                    sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
+                    sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end,'cons'])
+    print "Synth  Perc above errormargin, sc3: ", percent_above_forecasterrormargin(sc3_errormargin_synth.loc[nonfit_ts_start:nonfit_ts_end], \
+                    sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end, 'cons_pred'], \
+                    sim_input_synth.loc[nonfit_ts_start:nonfit_ts_end,'cons'])
+    print "Synth mean errormargin, sc2: ", sc2_errormargin_synth.mean()
+    print "Synth mean errormargin, sc3: ", sc3_errormargin_synth.mean()
+    print "Synth rms errormargin, sc2: ", rmse(sc2_errormargin_synth)
+    print "Synth rms errormargin, sc3: ", rmse(sc3_errormargin_synth)
+
     
     #% error margins:
-    plt.figure()
-    plt.plot_date(sim_input.index, sc2_errormargin, 'r-', label='Scenario 2')
-    plt.plot_date(sim_input.index, sc3_errormargin, 'g-', label='Scenario 3')
-    plt.plot_date(sim_input.index, sc35_errormargin, 'b-', label='Scenario 35')
-    plt.plot_date(sim_input.index, sim_input['cons']-sim_input['cons_pred'], 'y-', label='Forecast_error')
-    plt.title("Errormargin on forecast: " + station + ', ' + str(no_sigma) + r'$\sigma$')
-    plt.ylabel("[MW]")
-    plt.legend()
+    fig_error_margins(sc2_errormargin, sc3_errormargin, sim_input, sc3_model_uncert, station, no_sigma)
+    fig_error_margins(sc2_errormargin_synth, sc3_errormargin_synth, sim_input_synth, sc3_model_uncert_synth, station, no_sigma)
+    
+    sns.jointplot(np.abs(nonfit_errors), ens_preds.loc[nonfit_ts_start:nonfit_ts_end].std(axis=1))
+    sns.jointplot(np.abs(synth_resid), ens_preds.loc[nonfit_ts_start:nonfit_ts_end].std(axis=1))
+
 
     #% T Q scatter plots
     fig, axes = plt.subplots(3,1, figsize=(10,16), sharex=True, sharey=True)
@@ -544,37 +652,11 @@ def main(argv):
     fig.savefig(figpath + 'TQtimeseries_%2.2f'%(no_sigma) + 'sigma_' + station + '.pdf')
     
     # Differencen in supply temperature between the scenarios
-    fig, axes = plt.subplots(2,2, figsize=(30,7.5), sharex=True)
-    axes[0,0].plot_date(sim_input.index, sim_input['T_sup'] - sim_results_sc2['T_sup'], 'k-', label='Absolute reduction in supply temperature')
-    axes[0,0].set_title('Scenario 1 vs Scenario 2')
-    axes[0,0].annotate('mean: %2.3f' % (np.mean(sim_input['T_sup'] - sim_results_sc2['T_sup'])), xy=(0.05, 0.1), xycoords='axes fraction')
-    axes[0,0].set_ylabel(u'Differens in supply temperature 1-2 [%sC]'%uni_degree, size=8)
-    axes[1,0].plot_date(sim_input.index, 100*(1-(sim_results_sc2['T_sup']-T_grnd)/(sim_input['T_sup'] - T_grnd)), '-')
-    axes[1,0].set_ylabel('Heat loss\nreduction [%]', size=8)    
-    axes[1,0].set_title('Scenario 1 --> Scenario 2')
-    axes[1,0].annotate('mean: %2.3f' % (np.mean(100*(1-(sim_results_sc2['T_sup']-T_grnd)/(sim_input['T_sup'] - T_grnd)))), xy=(0.05, 0.1), xycoords='axes fraction')
-
-    axes[0,1].plot_date(sim_input.index, sim_results_sc2['T_sup'] - sim_results_sc3['T_sup'], 'k-', label='Absolute reduction in supply temperature')
-    axes[0,1].set_title('Scenario 2 vs Scenario 3')
-    axes[0,1].annotate('mean: %2.3f' % (np.mean(sim_results_sc2['T_sup'] - sim_results_sc3['T_sup'])), xy=(0.05, 0.1), xycoords='axes fraction')
-
-    axes[0,1].set_ylabel(u'Differens in supply temperature 2-3 [%sC]'%uni_degree, size=8)    
-    axes[1,1].plot_date(sim_input.index, 100*(1-(sim_results_sc3['T_sup']-T_grnd)/(sim_results_sc2['T_sup'] - T_grnd)), '-')
-    axes[1,1].set_ylabel('Heat loss\nreduction [%]', size=8) 
-    axes[1,1].set_title('Scenario 2 --> Scenario 3')
-    axes[1,1].annotate('mean: %2.3f' % (np.mean(100*(1-(sim_results_sc3['T_sup']-T_grnd)/(sim_results_sc2['T_sup'] - T_grnd)))), xy=(0.05, 0.1), xycoords='axes fraction')
-
-    fig.suptitle(station + ', ' + str(no_sigma) + r'$\sigma$')
-    fig.savefig(figpath + 'heat_loss_%2.2f'%(no_sigma) + 'sigma_' + station + '.pdf')
-
+    fig_heat_loss(sim_input, sim_results_sc2, sim_results_sc3, station, no_sigma)
+    fig_heat_loss(sim_input_synth, sim_results_sc2_synth, sim_results_sc3_synth, station, no_sigma, save=False)
+        
     
-    #%% investigate the error distribution. Is normality a reasonalble assumption?
-    qqplot(nonfit_errors)
-    print np.mean(nonfit_errors)
-    
-    
-    
-    return nonfit_errors
+    return 
     
     #%% The below section only runs if we view Tmin as a function of Q (the old way)
     # note: SOME OF THIS USES CONSTANT TRET!!
