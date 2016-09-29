@@ -92,6 +92,13 @@ def load_local_production(from_time, to_time):
     return np.array(full_prod[from_time:to_time])
 
 
+def load_local_EO3_9fc(from_time, to_time):
+    path = '/home/magnus/local_EO3_9fc/'
+    full_pred = pd.read_pickle(path + 'forecast_ts.pkl')
+
+    return np.array(full_pred[from_time:to_time])
+
+
 def fetch_EO3_midnight_forecast(from_time, to_time):
     # load data from Energy Opticon forecast
     conn = connect()
@@ -136,6 +143,11 @@ def fetch_EO3_9oclock_forecast(from_time, to_time):
 
     data_unique_forecast = [dp for dp in data if \
             ((dp[0]+dt.timedelta(hours=-24-1)).date()==dp[-1].date() and dp[-1].hour==9)]
+    if len(data_unique_forecast) != len(ens.gen_hourly_timesteps(from_time, to_time)):
+        print "Warning, forecast not found. Uses mean of yesterday's production"
+        return np.mean(load_local_production(from_time + dt.timedelta(hours=-48),\
+                                to_time + dt.timedelta(hours=-48)))*np.ones(\
+                                len(ens.gen_hourly_timesteps(from_time, to_time)))
     Opt_timesteps_original = list(zip(*data_unique_forecast)[0])
     Opt_forecast = zip(*data_unique_forecast)[1]
 

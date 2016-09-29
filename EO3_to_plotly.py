@@ -34,7 +34,7 @@ def main(argv):
     ts_end = dt.datetime(today.year, today.month, today.day, 0)
     ts = ens.gen_hourly_timesteps(dt.datetime(2016,2,26,1), ts_end)
 
-    predicted = sq.fetch_EO3_9oclock_forecast(ts[0], ts[-1])
+    predicted = sq.load_local_EO3_9fc(ts[0], ts[-1])
     prod = sq.load_local_production(ts[0], ts[-1])
     plt.plot_date(ts, prod, 'k-', lw=2, label='Realized production')
     plt.plot_date(ts, predicted, 'r-', lw=2, label='Forecast')
