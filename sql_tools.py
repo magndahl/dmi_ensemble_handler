@@ -65,16 +65,21 @@ def fetch_BrabrandSydWeather(weathervar, from_time, to_time):
 
 def fetch_production(from_time, to_time):
     conn = connect()
-    sql_query = """ USE [DM_VT]
+    try:
+        sql_query = """ USE [DM_VT]
                     SELECT [Tid_Key]
                           ,[SamletProduktionMWh]
                       FROM [dbo].[vFact_Timepris_Doegn]
                       WHERE Tid_Key BETWEEN '%s' AND  '%s'
                       ORDER BY Tid_Key""" % (ens.timestamp_str(from_time), ens.timestamp_str(to_time))
 
-    data = extractdata(conn, sql_query)
-    timestamps, production = zip(*data)
-    assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+        data = extractdata(conn, sql_query)
+        timestamps, production = zip(*data)
+        assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    except AssertionError:
+        data = extractdata(conn, sql_query.replace('SELECT', 'SELECT DISTINCT'))
+        timestamps, production = zip(*data)
+        assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
     prod_array = np.array(production, dtype=float)
     for ts in (2016032702, 2016032703):
         if ts in timestamps:
