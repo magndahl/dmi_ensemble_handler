@@ -63,7 +63,7 @@ def fetch_BrabrandSydWeather(weathervar, from_time, to_time):
     return np.array(values, dtype=float)
 
 
-def fetch_production(from_time, to_time):
+def fetch_production_old(from_time, to_time):
     conn = connect()
     try:
         sql_query = """ USE [DM_VT]
@@ -80,6 +80,28 @@ def fetch_production(from_time, to_time):
         data = extractdata(conn, sql_query.replace('SELECT', 'SELECT DISTINCT'))
         timestamps, production = zip(*data)
         assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
+    prod_array = np.array(production, dtype=float)
+    for ts in (2016032702, 2016032703):
+        if ts in timestamps:
+            print "Correcting error in production by transition to daylight savings on timestamp %s"%ts
+            index = timestamps.index(ts)
+            prod_array[index] = 2*prod_array[index]
+
+    return prod_array
+
+
+def fetch_production(from_time, to_time):
+    conn = connect()
+    sql_query = """ USE [DM_VT]
+                    SELECT [Tid_Key],
+                    SUM([ProduktionMWh]) as SamletProduktion
+                    FROM [dbo].[vProduktion_Doegn]
+                    WHERE Tid_Key BETWEEN '%s' AND '%s'
+                    GROUP BY [Tid_Key]
+                    ORDER BY Tid_Key""" % (ens.timestamp_str(from_time), ens.timestamp_str(to_time))
+    data = extractdata(conn, sql_query)
+    timestamps, production = zip(*data)
+    assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
     prod_array = np.array(production, dtype=float)
     for ts in (2016032702, 2016032703):
         if ts in timestamps:
