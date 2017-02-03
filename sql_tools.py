@@ -103,11 +103,29 @@ def fetch_production(from_time, to_time):
     timestamps, production = zip(*data)
     assert(list(timestamps)==[int(ens.timestamp_str(ts)) for ts in ens.gen_hourly_timesteps(from_time, to_time)]), "Timesteps are not hour by hour"
     prod_array = np.array(production, dtype=float)
+    # correct data error around daylight savings
     for ts in (2016032702, 2016032703):
         if ts in timestamps:
             print "Correcting error in production by transition to daylight savings on timestamp %s"%ts
             index = timestamps.index(ts)
             prod_array[index] = 2*prod_array[index]
+
+    # correct data error on Jan 16 2017
+    if all([ts in timestamps for ts in (2017011615, 2017011616, 2017011617)]):
+        mean_prod_jan16 = np.mean([prod_array[timestamps.index(t)] \
+                                    for t in (2017011615, 2017011616, 2017011617)])
+        for ts in (2017011615, 2017011616, 2017011617):
+            print "Correcting dataerror on %s" %ts
+            prod_array[timestamps.index(ts)] = mean_prod_jan16
+
+    # correct data error on Jan 21 2017
+    if all([ts in timestamps for ts in (2017012116, 2017012117)]):
+        mean_prod_jan21 = np.mean([prod_array[timestamps.index(t)] \
+                                    for t in (2017012116, 2017012117)])
+        for ts in (2017012116, 2017012117):
+            print "Correcting dataerror on %s" %ts
+            prod_array[timestamps.index(ts)] = mean_prod_jan21
+
 
     return prod_array
 
