@@ -126,6 +126,13 @@ def fetch_production(from_time, to_time):
             print "Correcting dataerror on %s" %ts
             prod_array[timestamps.index(ts)] = mean_prod_jan21
 
+    # correct for data error on March 30 2017
+    if all([ts in timestamps for ts in (2017033010, 2017033014)]):
+        for ts in (2017033010, 2017033014):
+            if prod_array[timestamps.index(ts)] > 1e6:
+                print "Correcting dataerror on %s" %ts
+                prod_array[timestamps.index(ts)] -= 1e6
+
 
     return prod_array
 
