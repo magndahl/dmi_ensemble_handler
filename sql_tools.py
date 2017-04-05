@@ -133,6 +133,15 @@ def fetch_production(from_time, to_time):
                 print "Correcting dataerror on %s" %ts
                 prod_array[timestamps.index(ts)] -= 1e6
 
+    # correct for data obviously erroneous values (>2000MW)
+    if any(prod_array>2e3):
+        for ix, p in enumerate(prod_array):
+            if p>2e3:
+                try:
+                    prod_array[ix] = (prod_array[ix-1] + prod_array[ix+1])/2
+                    print "Correcting dataerror on %s" % timestamps[ix]
+                except IndexError:
+                    print "Incorrect value on %s, not corrected" % timestamps[ix]
 
     return prod_array
 
