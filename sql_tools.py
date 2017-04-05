@@ -138,10 +138,21 @@ def fetch_production(from_time, to_time):
         for ix, p in enumerate(prod_array):
             if p>2e3:
                 try:
-                    prod_array[ix] = (prod_array[ix-1] + prod_array[ix+1])/2
-                    print "Correcting dataerror on %s" % timestamps[ix]
+                    for i in range(1,6):
+                        if (prod_array[ix+i]<=2e3) and (prod_array[ix-1]<=2e3):
+                            prod_array[ix] = (prod_array[ix-1] + prod_array[ix+i])/2
+                            print "Correcting dataerror on %s" % timestamps[ix]
+                            break
+                        raise IndexError
                 except IndexError:
-                    print "Incorrect value on %s, not corrected" % timestamps[ix]
+                    try:
+                        if prod_array[ix-1]<=2e3:
+                            prod_array[ix] = prod_array[ix-1]
+                            print "Correcting dataerror on %s" % timestamps[ix]
+                        else:
+                            print "Incorrect value on %s, not corrected" % timestamps[ix]
+                    except IndexError:
+                        print "Incorrect value on %s, not corrected" % timestamps[ix]
 
     return prod_array
 
