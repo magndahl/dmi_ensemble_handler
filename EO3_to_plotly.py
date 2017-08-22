@@ -29,7 +29,7 @@ def main(argv):
             print "Argument must be 'online' or a valid date in yyyy-mm-dd format."
             sys.exit()
 
-    # plot_historic_EO3_forecast and benchmark
+    print "plot_historic_EO3_forecast and benchmark"
     fig = plt.figure()
     ts_end = dt.datetime(today.year, today.month, today.day, 0)
     ts = ens.gen_hourly_timesteps(dt.datetime(2016,2,26,1), ts_end)
@@ -52,7 +52,7 @@ def main(argv):
     ply.plot(plotly_fig_hist, filename="EO3 forecast history", auto_open=False)
 
 
-    # Plot prediction for yesterday + benchmark
+    print  "Plot prediction for yesterday + benchmark"
     ts_start_yest = dt.datetime(today.year, today.month, today.day, hour=1)\
             +dt.timedelta(hours=-24)
     ts_end_yest = ts_start_yest + dt.timedelta(hours=23)
@@ -79,7 +79,7 @@ def main(argv):
 
 
 
-    # Plot prediction for tomorrow
+    print  "Plot prediction for tomorrow"
     ts_start = dt.datetime(today.year, today.month, today.day, hour=1)\
             +dt.timedelta(hours=24)
     ts_end = ts_start + dt.timedelta(hours=23)
