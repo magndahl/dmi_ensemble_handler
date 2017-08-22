@@ -133,6 +133,14 @@ def fetch_production(from_time, to_time):
                 print "Correcting dataerror on %s" %ts
                 prod_array[timestamps.index(ts)] -= 1e6
 
+    # correct for data error on August 21 2017
+    if all([ts in timestamps for ts in (2017082112, 2017082113)]):
+        for ts in (2017082112, 2017082113):
+            print "Correcting dataerror on %s" %ts
+            prod_array[timestamps.index(ts)] = 140.6 # average of surronding timesteps
+
+
+
     # correct for data obviously erroneous values (>2000MW)
     if any(prod_array>2e3):
         for ix, p in enumerate(prod_array):
